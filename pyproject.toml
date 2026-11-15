@@ -14,8 +14,14 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/yar4ick/ai-subtitle-translator-uk"
 
+[project.scripts]
+aisubs = "aisubs.cli:main"
+
 [tool.setuptools]
 packages = ["aisubs"]
+
+[tool.setuptools.package-data]
+aisubs = ["prompts/*.md"]
 
 [tool.setuptools.dynamic]
 version = { attr = "aisubs.__version__" }

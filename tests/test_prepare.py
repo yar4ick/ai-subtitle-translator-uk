@@ -1,0 +1,109 @@
+import unittest
+
+from aisubs import prepare, srt
+
+
+def item(text: str, keep_sdh: bool = False) -> prepare.Item | None:
+    return prepare.clean_cue(srt.Cue(0, 1000, text), keep_sdh)
+
+
+def texts(it: prepare.Item) -> list[str]:
+    return [p.text for p in it.parts]
+
+
+class CleanCueTest(unittest.TestCase):
+    def test_line_breaks_are_joined(self):
+        self.assertEqual(texts(item("we were driving up into this\nreally nice neighborhood,")),
+                         ["we were driving up into this really nice neighborhood,"])
+
+    def test_whole_cue_italic(self):
+        it = item("<i>So we met at a party,\nand it was magic.</i>")
+        self.assertEqual(texts(it), ["So we met at a party, and it was magic."])
+        self.assertTrue(it.parts[0].italic)
+
+    def test_italic_per_line_is_whole_italic(self):
+        it = item("<i>One</i>\n<i>two</i>")
+        self.assertEqual((texts(it), it.parts[0].italic), (["One two"], True))
+
+    def test_partial_italic_kept_inline(self):
+        it = item("I said <i>never</i>.")
+        self.assertEqual((texts(it), it.parts[0].italic), (["I said <i>never</i>."], False))
+
+    def test_dialogue(self):
+        it = item("- Yeah.\n- And stuff. Like I...")
+        self.assertEqual(texts(it), ["Yeah.", "And stuff. Like I..."])
+
+    def test_dialogue_without_first_dash(self):
+        self.assertEqual(texts(item("Are you coming?\n- Sure.")), ["Are you coming?", "Sure."])
+
+    def test_single_dash_is_not_dialogue(self):
+        self.assertEqual(texts(item("- I mean, I'll try\nanything.")), ["I mean, I'll try anything."])
+
+    def test_dialogue_italic_one_speaker(self):
+        it = item("- Hello?\n<i>- I'm outside.</i>")
+        self.assertEqual([p.italic for p in it.parts], [False, True])
+
+    def test_position_tag_and_other_tags(self):
+        it = item('{\\an8}<font color="#ffff00">Look &amp; see</font>')
+        self.assertEqual((it.pos, texts(it)), ("{\\an8}", ["Look & see"]))
+
+    def test_ads_are_dropped(self):
+        self.assertIsNone(item("Subtitles by explosiveskull\nwww.OpenSubtitles.org"))
+        self.assertIsNone(item("Synced and corrected by someone"))
+
+    def test_sdh_is_stripped_and_speaker_kept(self):
+        it = item("SOPHIE: [laughs] Where are you?")
+        self.assertEqual(texts(it), ["Where are you?"])
+        self.assertEqual(it.parts[0].speaker, "Sophie")
+
+    def test_sdh_only_cue_is_dropped(self):
+        self.assertIsNone(item("[door slams]"))
+        self.assertIsNone(item("<i>(phone ringing)</i>"))
+
+    def test_sdh_dialogue_collapses(self):
+        self.assertEqual(texts(item("- [laughs]\n- Hi.")), ["Hi."])
+
+    def test_keep_sdh(self):
+        it = item("SOPHIE: [laughs] Where are you?", keep_sdh=True)
+        self.assertEqual(texts(it), ["SOPHIE: [laughs] Where are you?"])
+        self.assertEqual(it.parts[0].speaker, "Sophie")
+
+    def test_music_only_is_skipped_but_kept(self):
+        it = item("♪ ♪")
+        self.assertTrue(it.skip)
+        self.assertEqual(it.source, "♪ ♪")
+
+    def test_lyrics_are_translated(self):
+        self.assertFalse(item("♪ Sail away ♪").skip)
+
+
+class ChunksTest(unittest.TestCase):
+    @staticmethod
+    def items(starts: list[int]) -> list[prepare.Item]:
+        return [prepare.Item(s, s + 900, [prepare.Part("x")]) for s in starts]
+
+    def test_whole_scenes(self):
+        # three scenes of 4 items, separated by 10 s pauses
+        starts = [i * 1000 + (i // 4) * 10_000 for i in range(12)]
+        self.assertEqual(prepare.make_chunks(self.items(starts), max_size=8), [(0, 8), (8, 12)])
+        self.assertEqual(prepare.make_chunks(self.items(starts), max_size=5), [(0, 4), (4, 8), (8, 12)])
+
+    def test_long_scene_is_split(self):
+        chunks = prepare.make_chunks(self.items([i * 1000 for i in range(25)]), max_size=10)
+        self.assertTrue(all(b - a <= 10 for a, b in chunks))
+        self.assertEqual((chunks[0][0], chunks[-1][1]), (0, 25))
+
+    def test_empty(self):
+        self.assertEqual(prepare.make_chunks([]), [])
+
+
+class TitleTest(unittest.TestCase):
+    def test_guess(self):
+        self.assertEqual(prepare.guess_title("The.One.I.Love.2014.LIMITED.720p.BluRay.x264-GECKOS.srt"), "The One I Love (2014)")
+        self.assertEqual(prepare.guess_title("Blade.Runner.2049.2017.1080p.srt"), "Blade Runner 2049 (2017)")
+        self.assertEqual(prepare.guess_title("2001.A.Space.Odyssey.1968.srt"), "2001 A Space Odyssey (1968)")
+        self.assertEqual(prepare.guess_title("my film.srt"), "my film")
+
+
+if __name__ == "__main__":
+    unittest.main()
