@@ -30,7 +30,9 @@ def cmd_prepare(args) -> int:
     print(f"Title: {m['title']}  (wrong? rerun with --title \"Name (year)\")")
     print(f"Subtitles: {m['cues']}, dropped (ads, SDH-only, empty): {m['dropped']}, lines to translate: {lines}")
     print(f"Parts: {len(project.chunks)}")
-    print(f"Next: aisubs next {args.film}")
+    if args.wikipedia is not None:
+        print(project.fetch_wikipedia(args.wikipedia))
+    print(f"Next: aisubs glossary {args.film}  (or skip it: aisubs next {args.film})")
     return 0
 
 
@@ -53,6 +55,8 @@ def _request(project: Project, k: int, brief: bool) -> str:
 
 def cmd_glossary(args) -> int:
     project = Project(args.film).load()
+    if args.wikipedia is not None:
+        print(project.fetch_wikipedia(args.wikipedia), file=sys.stderr)
     if args.answer is None:
         sys.stdout.write(project.glossary_request())
         return 0
@@ -65,6 +69,9 @@ def cmd_glossary(args) -> int:
     print(f"Glossary saved: {len(g.cast)} characters, {len(g.pairs)} pairs, {len(g.terms)} terms" + (f", {unsure} unsure (marked ?)" if unsure else ""))
     if ignored:
         print(f"ignored {len(ignored)} lines that are not glossary lines")
+    data = project.candidates()
+    for warning in glossary.cross_check(g, data["candidates"], project.source_names()):
+        print(f"warning: {warning}")
     print(f"Check or edit {project.glossary_path}, then: aisubs next {args.film}")
     return 0
 
@@ -317,11 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scene-gap", type=int, default=3000, help="pause in ms that ends a scene (default: 3000)")
     p.add_argument("--encoding", help="source encoding if it is detected wrongly")
     p.add_argument("--force", action="store_true", help="start over, deleting existing translations")
+    p.add_argument("--wikipedia", nargs="?", const="", metavar="PAGE", help="add the cast from Wikipedia to the glossary request (optionally the exact English article title)")
     p.set_defaults(func=cmd_prepare)
 
     p = sub.add_parser("glossary", help="print the glossary request, or save the AI answer to it")
     p.add_argument("film")
     p.add_argument("answer", nargs="?", help="file with the AI answer, or - for stdin; without it the request is printed")
+    p.add_argument("--wikipedia", nargs="?", const="", metavar="PAGE", help="first fetch the cast from Wikipedia (optionally the exact English article title)")
     p.set_defaults(func=cmd_glossary)
 
     p = sub.add_parser("status", help="show translation progress")
