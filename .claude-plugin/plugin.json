@@ -1,0 +1,9 @@
+{
+  "name": "aisubs",
+  "version": "0.0.1",
+  "description": "AI translation of SRT subtitles from English into Ukrainian: glossary, speaker-aware translation, checks and review.",
+  "author": { "name": "yar4ick" },
+  "repository": "https://github.com/yar4ick/ai-subtitle-translator-uk",
+  "license": "MIT",
+  "keywords": ["subtitles", "srt", "translation", "ukrainian"]
+}

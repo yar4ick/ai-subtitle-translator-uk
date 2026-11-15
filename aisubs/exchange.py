@@ -126,7 +126,7 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool, str]], list[str]
         speakers = ""
         if m := _SPEAKERS_RE.match(body):
             speakers = m.group(3) or f"{m.group(1)}>{m.group(2)}"
-            body = body[m.end():]
+            body = _ECHOED_BUDGET_RE.sub("", body[m.end():])  # "Ш>С|≤58|text": the budget echoed after S>A
             # `?` after a code is a doubt; an unnamed person is ч/ж/x and is not flagged
             flag = flag or "?" in speakers
         result[key] = (body, bool(flag), speakers)

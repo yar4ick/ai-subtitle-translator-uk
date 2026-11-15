@@ -123,6 +123,7 @@ class TitleTest(unittest.TestCase):
         self.assertEqual(prepare.guess_title("The.One.I.Love.2014.LIMITED.720p.BluRay.x264-GECKOS.srt"), "The One I Love (2014)")
         self.assertEqual(prepare.guess_title("Blade.Runner.2049.2017.1080p.srt"), "Blade Runner 2049 (2017)")
         self.assertEqual(prepare.guess_title("2001.A.Space.Odyssey.1968.srt"), "2001 A Space Odyssey (1968)")
+        self.assertEqual(prepare.guess_title("Cyberpunk.Edgerunners.S01E01.en.srt"), "Cyberpunk Edgerunners S01E01")
         self.assertEqual(prepare.guess_title("my film.srt"), "my film")
 
 
