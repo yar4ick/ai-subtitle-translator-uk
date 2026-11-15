@@ -1,4 +1,4 @@
-"""Command line: aisubs prepare | status | next | import | assemble."""
+"""Command line: aisubs prepare | glossary | status | next | import | assemble."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, assemble, exchange, srt
+from . import __version__, assemble, exchange, glossary, srt
 from .project import Project, ProjectError
 
 
@@ -33,6 +33,32 @@ def cmd_prepare(args) -> int:
     return 0
 
 
+def _request(project: Project, k: int, brief: bool) -> str:
+    g = project.glossary()
+    return exchange.build_request(
+        project.items, project.chunks, k, project.done(), project.meta["title"],
+        brief=brief, glossary_block="" if g.is_empty() else glossary.render(g),
+    )
+
+
+def cmd_glossary(args) -> int:
+    project = Project(args.film).load()
+    if args.answer is None:
+        sys.stdout.write(project.glossary_request())
+        return 0
+    text = sys.stdin.read() if args.answer == "-" else Path(args.answer).read_text(encoding="utf-8-sig")
+    g, ignored = glossary.parse(text)
+    if g.is_empty():
+        raise ProjectError("no glossary lines found (expected STYLE|, PLOT|, C|, P|, T|)")
+    project.save_glossary(g)
+    unsure = sum(1 for row in g.cast + g.pairs + g.terms if row[-1].endswith("?") or any(v.endswith("?") for v in row))
+    print(f"Glossary saved: {len(g.cast)} characters, {len(g.pairs)} pairs, {len(g.terms)} terms" + (f", {unsure} unsure (marked ?)" if unsure else ""))
+    if ignored:
+        print(f"ignored {len(ignored)} lines that are not glossary lines")
+    print(f"Check or edit {project.glossary_path}, then: aisubs next {args.film}")
+    return 0
+
+
 def cmd_status(args) -> int:
     project = Project(args.film).load()
     done, flags = project.done(), project.flags()
@@ -43,6 +69,8 @@ def cmd_status(args) -> int:
         mark = "done" if have == len(keys) else ("partial" if have else "todo")
         flagged = len(flags.get(k, []))
         print(f"part {k + 1:>3}/{total}: {mark:<7} {have}/{len(keys)} lines" + (f", {flagged} flagged" if flagged else ""))
+    g = project.glossary()
+    print("Glossary: " + ("none (aisubs glossary " + str(args.film) + ")" if g.is_empty() else f"{len(g.cast)} characters, {len(g.pairs)} pairs, {len(g.terms)} terms"))
     pending = project.pending_chunk()
     print(f"Next: aisubs next {args.film}" if pending is not None else f"All parts translated. Next: aisubs assemble {args.film}")
     return 0
@@ -65,7 +93,7 @@ def cmd_next(args) -> int:
     if project.is_complete(k):
         print(f"Part {k + 1} is already translated.")
         return 0
-    sys.stdout.write(exchange.build_request(project.items, project.chunks, k, project.done(), project.meta["title"], brief=args.brief))
+    sys.stdout.write(_request(project, k, args.brief))
     return 0
 
 
@@ -82,6 +110,11 @@ def cmd_import(args) -> int:
     answer, ignored = exchange.parse_answer(text)
     report = project.save(k, answer)
     print(f"part {k + 1}/{len(project.chunks)}: accepted {len(report['accepted'])} lines")
+    if additions := glossary.parse_additions(text):
+        g = project.glossary()
+        if added := glossary.add_terms(g, additions):
+            project.save_glossary(g)
+            print("glossary: added " + "; ".join(f"{en}={uk}" for en, uk in added))
     if ignored:
         print(f"ignored {len(ignored)} lines that are not `ID|text`")
     if report["unknown"]:
@@ -92,7 +125,7 @@ def cmd_import(args) -> int:
         print(f"missing {len(report['missing'])} lines: " + ", ".join(report["missing"][:30]))
         if args.next:
             print()
-            sys.stdout.write(exchange.build_request(project.items, project.chunks, k, project.done(), project.meta["title"], brief=True))
+            sys.stdout.write(_request(project, k, True))
         else:
             print(f"Get them with: aisubs next {args.film}")
         return 2
@@ -101,7 +134,7 @@ def cmd_import(args) -> int:
         print(f"All parts translated. Next: aisubs assemble {args.film}")
     elif args.next:
         print()
-        sys.stdout.write(exchange.build_request(project.items, project.chunks, pending, project.done(), project.meta["title"], brief=True))
+        sys.stdout.write(_request(project, pending, True))
     else:
         print(f"Next: aisubs next {args.film}")
     return 0
@@ -143,6 +176,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--encoding", help="source encoding if it is detected wrongly")
     p.add_argument("--force", action="store_true", help="start over, deleting existing translations")
     p.set_defaults(func=cmd_prepare)
+
+    p = sub.add_parser("glossary", help="print the glossary request, or save the AI answer to it")
+    p.add_argument("film")
+    p.add_argument("answer", nargs="?", help="file with the AI answer, or - for stdin; without it the request is printed")
+    p.set_defaults(func=cmd_glossary)
 
     p = sub.add_parser("status", help="show translation progress")
     p.add_argument("film")

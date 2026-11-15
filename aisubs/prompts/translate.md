@@ -19,8 +19,8 @@ LENGTH
 LANGUAGE
 - Living spoken Ukrainian in the register of the film and of each character. Render idioms, insults and exclamations by function, with what a Ukrainian would say there. No calques, no Russianisms, no surzhyk.
 - Swearing: keep its strength with natural Ukrainian swearing; do not soften and do not add.
-- When the speaker or addressee is unclear, prefer wording that does not show gender if it sounds natural.
-- Names: Ukrainian transliteration, consistent across the film.
+- GLOSSARY, when given, is binding: use the gender of the speaker and the addressee from CAST and ти/ви from PAIRS; work out who speaks to whom from the scene. When it is still unclear, prefer wording that does not show gender if it sounds natural.
+- Names and terms exactly as in CAST and TERMS; otherwise Ukrainian transliteration, consistent across the film. If you coin a rendering for a new recurring name or term, add a final line `+|english=українською`.
 - «» for quotes, … for ellipsis, — for a dash. Numbers one to ten in words, larger numbers in digits.
 - CONTEXT lines are for reference only; do not translate them.
 

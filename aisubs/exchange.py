@@ -8,7 +8,7 @@ from pathlib import Path
 from . import limits
 from .prepare import Item
 
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 PROMPTS = Path(__file__).parent / "prompts"
 CONTEXT_BEFORE = 5
 CONTEXT_AFTER = 3
@@ -49,13 +49,17 @@ def build_request(
     title: str,
     *,
     brief: bool = False,
+    glossary_block: str = "",
 ) -> str:
     """Request text for chunk `k` (0-based), asking only for keys not in done[k].
 
     `brief` is for an agent that keeps the conversation: no instructions and
-    no previous lines, which it has already seen.
+    no previous lines, which it has already seen. The glossary block goes
+    with the instructions.
     """
     out = [] if brief else [instructions(title), ""]
+    if glossary_block and not brief:
+        out += ["GLOSSARY", glossary_block, ""]
 
     prev = done.get(k - 1, {})
     if k > 0 and prev and not brief:
@@ -94,7 +98,8 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool]], list[str]]:
             continue
         m = _ANSWER_RE.match(line)
         if not m:
-            ignored.append(line.strip())
+            if not line.strip().startswith("+|"):  # glossary additions are read separately
+                ignored.append(line.strip())
             continue
         table, key, flag, body = m.groups()
         if table and body.endswith("|"):

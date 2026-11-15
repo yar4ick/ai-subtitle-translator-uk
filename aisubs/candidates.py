@@ -135,7 +135,8 @@ def sample(items: list[Item], scene_gap: int = 3000) -> list[str]:
     picked += openings
     out = []
     for i in sorted(set(picked)):
-        out.append(" / ".join(_plain(p.text) for p in items[i].parts))
+        # A known SDH speaker is the best hint the glossary can get
+        out.append(" / ".join((f"{p.speaker}: " if p.speaker else "") + _plain(p.text) for p in items[i].parts))
     return out
 
 

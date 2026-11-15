@@ -106,6 +106,23 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("TRANSLATE (part 2 of", out)
 
+    def test_glossary_flow(self):
+        run("prepare", str(self.film))
+        code, request = run("glossary", str(self.film))
+        self.assertIn("Build a translation glossary", request)
+        self.assertIn("\nMarta: Nobody comes here anymore.\n", request)  # SDH speaker kept in the sample
+        code, out = run("glossary", str(self.film), "-", stdin="C|М|Marta|Марта|ж|доглядачка маяка|сувора\nT|lighthouse|маяк\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 characters, 0 pairs, 1 terms", out)
+        _, request = run("next", str(self.film))
+        self.assertIn("GLOSSARY\nCAST (code name — gender; role; voice):\nМ Марта (Marta) — ж; доглядачка маяка; сувора\nTERMS: lighthouse=маяк\n", request)
+        _, brief = run("next", str(self.film), "--brief")
+        self.assertNotIn("GLOSSARY", brief)
+        answer = fake_translate(request) + "+|keeper=доглядач\n"
+        code, out = run("import", str(self.film), stdin=answer)
+        self.assertIn("glossary: added keeper=доглядач", out)
+        self.assertNotIn("ignored", out)
+
     def test_prepare_refuses_to_overwrite_translations(self):
         run("prepare", str(self.film))
         _, request = run("next", str(self.film))

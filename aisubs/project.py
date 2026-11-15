@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from . import candidates, exchange, prepare, srt
+from . import candidates, exchange, glossary, prepare, srt
 
 FORMAT_VERSION = 1
 
@@ -38,6 +38,24 @@ class Project:
     def done_dir(self) -> Path:
         return self.dir / "done"
 
+    @property
+    def glossary_path(self) -> Path:
+        return self.dir / "glossary.txt"
+
+    def glossary(self) -> glossary.Glossary:
+        if not self.glossary_path.exists():
+            return glossary.Glossary()
+        return glossary.parse(self.glossary_path.read_text(encoding="utf-8"))[0]
+
+    def save_glossary(self, g: glossary.Glossary) -> None:
+        tmp = self.glossary_path.with_suffix(".tmp")
+        tmp.write_text(glossary.dumps(g), encoding="utf-8")
+        tmp.replace(self.glossary_path)
+
+    def glossary_request(self) -> str:
+        data = json.loads((self.dir / "candidates.json").read_text(encoding="utf-8"))
+        return glossary.build_request(self.meta["title"], data["candidates"], data["sample"])
+
     def output_path(self) -> Path:
         stem = re.sub(r"[._-](en|eng|english)$", "", self.film.stem, flags=re.IGNORECASE)
         return self.film.with_name(stem + ".uk.srt")
@@ -56,6 +74,8 @@ class Project:
         self.done_dir.mkdir(exist_ok=True)
         for old in self.done_dir.glob("*.json"):
             old.unlink()
+        if self.glossary_path.exists() and force:
+            self.glossary_path.unlink()
         self.meta = {
             "format": FORMAT_VERSION,
             "prompt_version": exchange.PROMPT_VERSION,
