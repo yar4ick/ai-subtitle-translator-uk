@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from aisubs import srt  # noqa: E402
+from aisubs import limits, srt  # noqa: E402
 
 _CYRILLIC_RE = re.compile(r"[а-яіїєґ]", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>|\{\\[^}]*\}")
@@ -139,7 +139,7 @@ def formality(text: str) -> str:
 
 
 def cps(text: str, cue: srt.Cue) -> float:
-    return len(plain(text).replace(" ", "")) / max(0.5, (cue.end - cue.start) / 1000)
+    return limits.cps(_TAG_RE.sub("", text), cue.start, cue.end)
 
 
 def capitalized(cues: list[srt.Cue]) -> Counter[str]:
