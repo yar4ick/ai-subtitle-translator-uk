@@ -18,6 +18,12 @@ _AD_RE = re.compile(
     r"|subtitles? (by|ripped|downloaded|synced|corrected)|\b(sync|synced|corrected|ripped|encoded)\s+(and\s+\w+\s+)?by\b",
     re.IGNORECASE,
 )
+# Release tags of the subtitle file: "Film (1994) ….HI1", "720p.BluRay.x264"
+_RELEASE_RE = re.compile(
+    r"(?:^|[\s._-])(?:HI\d|SDH|CC|\d{3,4}p|Blu-?Ray|BRRip|BDRip|WEB-?DL|WEBRip|HDTV|DVDRip|x26[45]|HEVC)(?:$|[\s._-])"
+)
+_YEAR_RE = re.compile(r"\((?:19|20)\d\d\)")
+EDGE = 3  # a title card of the subtitle file sits among the first or last cues
 _POS_RE = re.compile(r"^\{\\an\d\}")
 _OVERRIDE_RE = re.compile(r"\{\\[^}]*\}")
 _TAG_RE = re.compile(r"</?(?:font|b|u|s)\b[^>]*>", re.IGNORECASE)
@@ -141,9 +147,18 @@ def _strip_prefix(segments: list[tuple[str, bool]], pattern: re.Pattern) -> list
     return out
 
 
+def _is_banner(text: str) -> bool:
+    """A credit of the subtitle file itself, like "Léon- The Professional (1994) Luc Besson….HI1"."""
+    text = _TAG_RE.sub("", text)
+    return bool(_RELEASE_RE.search(text) or (_YEAR_RE.search(text) and "\n" not in text.strip() and not text.rstrip().endswith(("?", "!"))))
+
+
 def make_items(cues: list[srt.Cue], keep_sdh: bool = False) -> tuple[list[Item], int]:
     """Return (items, number of dropped cues)."""
-    items = [clean_cue(c, keep_sdh) for c in cues]
+    items = [
+        None if (n < EDGE or n >= len(cues) - EDGE) and _is_banner(c.text) else clean_cue(c, keep_sdh)
+        for n, c in enumerate(cues)
+    ]
     kept = [i for i in items if i is not None]
     return kept, len(items) - len(kept)
 

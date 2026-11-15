@@ -112,7 +112,7 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool, str]], list[str]
     result: dict[str, tuple[str, bool, str]] = {}
     ignored = []
     for line in text.splitlines():
-        if not line.strip() or line.strip().startswith("```") or _TABLE_RULE_RE.match(line):
+        if not line.strip() or line.strip() == "=" or line.strip().startswith("```") or _TABLE_RULE_RE.match(line):
             continue
         m = _ANSWER_RE.match(line)
         if not m:
