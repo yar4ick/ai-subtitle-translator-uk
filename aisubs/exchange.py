@@ -18,8 +18,8 @@ TIGHT_RATIO = 0.85  # mark a line with its budget when the English uses more tha
 _ANSWER_RE = re.compile(r"^\s*(\|)?\s*\**(\d+[a-z]?)\**\s*(\?)?\s*\|\s?(.*?)\s*$")
 _TABLE_RULE_RE = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
 _ECHOED_BUDGET_RE = re.compile(r"^≤\d+\|\s?")
-# Who speaks to whom: "Д>Гл|text", "?>М|text", "-|text" is not used, narration is "->-"
-_SPEAKERS_RE = re.compile(r"^([^\s|>]{1,4})\s*>\s*([^\s|>]{1,4})\s*\|\s?")
+# Who speaks to whom: "Д>Гл|text", "?>М|text"; models also write a bare "-|text" for narration
+_SPEAKERS_RE = re.compile(r"^(?:([^\s|>]{1,4})\s*>\s*([^\s|>]{1,4})|([-*?]))\s*\|\s?")
 
 
 def chunk_keys(items: list[Item], chunk: tuple[int, int]) -> list[tuple[str, int, int]]:
@@ -110,7 +110,8 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool, str]], list[str]
         body = _ECHOED_BUDGET_RE.sub("", body)
         speakers = ""
         if m := _SPEAKERS_RE.match(body):
-            speakers, body = f"{m.group(1)}>{m.group(2)}", body[m.end():]
+            speakers = m.group(3) or f"{m.group(1)}>{m.group(2)}"
+            body = body[m.end():]
             flag = flag or "?" in speakers
         result[key] = (body, bool(flag), speakers)
     return result, ignored

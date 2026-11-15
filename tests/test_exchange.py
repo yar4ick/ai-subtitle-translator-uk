@@ -83,6 +83,10 @@ class ParseAnswerTest(unittest.TestCase):
         self.assertEqual(answer["2"], ("Хто там?", True, "?>М"))
         self.assertEqual(answer["3"], ("Новини", False, "->-"))
         self.assertEqual(answer["4"], ("Так.", False, "Гл>Д"))
+        answer, _ = exchange.parse_answer("5|-|Новини дня\n6|?|Хто це?\n7|-Так.")
+        self.assertEqual(answer["5"], ("Новини дня", False, "-"))
+        self.assertEqual(answer["6"], ("Хто це?", True, "?"))
+        self.assertEqual(answer["7"], ("-Так.", False, ""))
 
     def test_text_with_arrow_is_not_speakers(self):
         self.assertEqual(exchange.parse_answer("1|Два > один, ясно?")[0]["1"], ("Два > один, ясно?", False, ""))
