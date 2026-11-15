@@ -1,4 +1,4 @@
-"""Command line: aisubs prepare | glossary | status | next | import | validate | fix | assemble."""
+"""Command line: aisubs prepare | glossary | status | next | import | validate | fix | review | assemble."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import __version__, assemble, exchange, glossary, prepare, srt, validate
+from . import __version__, assemble, exchange, glossary, prepare, review, srt, validate
 from .project import Project, ProjectError
 
 
@@ -146,7 +146,8 @@ def _after_all_done(project: Project, args, brief_next: bool) -> int:
     print("\n".join(lines))
     k = _fix_part(project, problems)
     if k is None:
-        print(f"Nothing to fix. Next: aisubs assemble {args.film}")
+        nxt = "review" if problems else "assemble"
+        print(f"Nothing to fix. Next: aisubs {nxt} {args.film}")
         return 0
     if brief_next:
         print()
@@ -235,7 +236,8 @@ def cmd_validate(args) -> int:
     if _fix_part(project, problems) is not None:
         print(f"Next: aisubs fix {args.film}")
         return 2
-    print(f"Nothing to fix. Next: aisubs assemble {args.film}")
+    nxt = "review" if any(not p.fix for p in problems) else "assemble"
+    print(f"Nothing to fix. Next: aisubs {nxt} {args.film}")
     return 0
 
 
@@ -247,6 +249,36 @@ def cmd_fix(args) -> int:
         print(f"Nothing to fix. Next: aisubs assemble {args.film}")
         return 0
     sys.stdout.write(validate.fix_request(project, k, problems, brief=args.brief, instructions=_header(project)))
+    return 0
+
+
+def cmd_review(args) -> int:
+    project = Project(args.film).load()
+    path = Path(args.file) if args.file else project.dir / "review.txt"
+    if args.apply:
+        if not path.exists():
+            raise ProjectError(f"{path} not found; first run: aisubs review {args.film}")
+        changed, errors = review.apply(project, path.read_text(encoding="utf-8-sig"))
+        for error in errors:
+            print(f"warning: {error}")
+        print(f"Saved {len(changed)} changed lines" + (": " + ", ".join(f"{k + 1}:{key}" for k, key in changed[:30]) if changed else ""))
+        checker = validate.Checker(project.glossary())
+        done, speakers = project.done(), project.speakers()
+        for k, key in changed:
+            sa = speakers.get(k, {}).get(key, "")
+            for problem in validate.checks.gender_conflicts(done[k][key], sa, checker.cast) if sa else []:
+                print(f"gender check: {k + 1}:{key}|{sa}|{done[k][key]} — {problem}")
+        print(f"Next: aisubs assemble {args.film}")
+        return 0
+    if path.exists() and not args.force and review.apply(project, path.read_text(encoding="utf-8-sig"), dry_run=True)[0]:
+        raise ProjectError(f"{path} has edits that are not saved yet: run aisubs review {args.film} --apply (or --force to discard them)")
+    problems, _ = validate.run(project)
+    text, count = review.render(project, problems, args.film)
+    if not count:
+        print(f"Nothing to review. Next: aisubs assemble {args.film}")
+        return 0
+    path.write_text(text, encoding="utf-8")
+    print(f"Wrote {path}: {count} lines to look at. Edit it, then: aisubs review {args.film} --apply")
     return 0
 
 
@@ -319,6 +351,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--part", type=int, help="part number (default: the first with problems)")
     p.add_argument("--brief", action="store_true", help="omit the instructions (the AI already has them)")
     p.set_defaults(func=cmd_fix)
+
+    p = sub.add_parser("review", help="write the doubtful scenes to a file for a person to check; --apply saves the edits")
+    p.add_argument("film")
+    p.add_argument("--apply", action="store_true", help="save the edits made in the review file")
+    p.add_argument("--file", help="review file (default: film.aisubs/review.txt)")
+    p.add_argument("--force", action="store_true", help="write a new review file even if the old one has unsaved edits")
+    p.set_defaults(func=cmd_review)
 
     p = sub.add_parser("assemble", help="write the translated .uk.srt")
     p.add_argument("film")

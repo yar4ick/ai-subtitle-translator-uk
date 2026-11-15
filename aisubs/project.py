@@ -152,6 +152,24 @@ class Project:
             self.meta["refused"] = sorted(new)
             _write_json(self.dir / "meta.json", self.meta)
 
+    def reviewed(self) -> dict[int, set[str]]:
+        """Part -> keys a person has edited in review; checks leave them alone."""
+        out = {}
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                out[k] = set(json.loads(path.read_text(encoding="utf-8")).get("reviewed", []))
+        return out
+
+    def notes(self) -> dict[int, list[list[str]]]:
+        """Part -> scene notes [first, last, note] the AI wrote."""
+        out = {}
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                out[k] = json.loads(path.read_text(encoding="utf-8")).get("notes", [])
+        return out
+
     def retries(self) -> dict[int, dict[str, int]]:
         """Part -> {key: how many times the line was sent back by `fix`}."""
         out = {}
@@ -172,7 +190,7 @@ class Project:
         done = self.done()
         return next((k for k in range(len(self.chunks)) if not self.is_complete(k, done)), None)
 
-    def save(self, k: int, answer: dict[str, tuple[str, bool, str]], notes: list | None = None, *, retry: bool = False) -> dict:
+    def save(self, k: int, answer: dict[str, tuple[str, bool, str]], notes: list | None = None, *, retry: bool = False, reviewed: bool = False) -> dict:
         """Merge accepted lines into chunk k (counting a retry for each with `retry`). Return a report."""
         expected = self.keys(k)
         path = self._done_path(k)
@@ -194,6 +212,12 @@ class Project:
                 record["flags"].append(key)
             elif not flagged and key in record["flags"]:
                 record["flags"].remove(key)
+            if reviewed:
+                record.setdefault("reviewed", [])
+                if key not in record["reviewed"]:
+                    record["reviewed"].append(key)
+            elif key in record.get("reviewed", []):
+                record["reviewed"].remove(key)  # the AI translated it again
             if retry:
                 record.setdefault("retries", {})
                 record["retries"][key] = record["retries"].get(key, 0) + 1

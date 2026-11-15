@@ -77,6 +77,27 @@ class CleanCueTest(unittest.TestCase):
         self.assertFalse(item("♪ Sail away ♪").skip)
 
 
+class BannerTest(unittest.TestCase):
+    def cues(self, texts):
+        return [srt.Cue(n * 2000, n * 2000 + 1500, t) for n, t in enumerate(texts)]
+
+    def test_title_card_of_the_file_is_dropped_at_the_edges(self):
+        banner = '<font color="#ff00ff">Léon- The Professional (1994) Luc Besson Jean Reno.HI1</font>'
+        texts = [banner] + [f"Line {n}." for n in range(10)] + [banner]
+        items, dropped = prepare.make_items(self.cues(texts))
+        self.assertEqual(dropped, 2)
+        self.assertEqual(items[0].source, "Line 0.")
+
+    def test_same_text_in_the_middle_is_kept(self):
+        texts = [f"Line {n}." for n in range(5)] + ["Movie (1994) was great"] + [f"Line {n}." for n in range(5)]
+        self.assertEqual(prepare.make_items(self.cues(texts))[1], 0)
+
+    def test_dialogue_is_not_a_banner(self):
+        self.assertFalse(prepare._is_banner("Hi, Mike!"))
+        self.assertFalse(prepare._is_banner("Born in (1980)?"))
+        self.assertTrue(prepare._is_banner("Film.2019.720p.BluRay.x264"))
+
+
 class ChunksTest(unittest.TestCase):
     @staticmethod
     def items(starts: list[int]) -> list[prepare.Item]:

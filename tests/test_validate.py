@@ -123,5 +123,47 @@ class FixFlowTest(unittest.TestCase):
         self.assertNotIn("refused", out)
 
 
+class ReviewTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.film = self.tmp / "Lighthouse.2021.en.srt"
+        shutil.copy(FIXTURES / "basic.srt", self.film)
+        run("prepare", str(self.film))
+        run("glossary", str(self.film), "-", stdin="C|М|Marta|Марта|ж|доглядачка|сувора\n")
+        _, request = run("next", str(self.film))
+        answer = answer_all(request).replace("2a|Л>Б|", "2a|М?>Б|")
+        run("import", str(self.film), stdin=answer + "@|1-4|Marta alone. 4=М\n")
+        self.path = self.tmp / "Lighthouse.2021.en.aisubs" / "review.txt"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_write_edit_apply(self):
+        code, out = run("review", str(self.film))
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 lines to look at", out)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("# Codes: М Марта", text)
+        self.assertIn("   AI note 1–4: Marta alone. 4=М", text)
+        self.assertIn("   Did you see that?\n!  the model was unsure who speaks (?)\n1:2a|М?>Б|Що?\n", text)
+
+        self.path.write_text(text.replace("1:2a|М?>Б|Що?", "1:2a|М>Б|Я забув?"), encoding="utf-8")
+        code, out = run("review", str(self.film))
+        self.assertEqual(code, 1)
+        self.assertIn("not saved yet", out)
+
+        code, out = run("review", str(self.film), "--apply")
+        self.assertIn("Saved 1 changed lines: 1:2a", out)
+        self.assertIn("gender check: 1:2a|М>Б|Я забув? — «я забув», but S is ж", out)
+        project = Project(self.film).load()
+        self.assertEqual(project.done()[0]["2a"], "Я забув?")
+        self.assertEqual(project.flags()[0], [])
+
+        code, out = run("review", str(self.film))
+        self.assertIn("Nothing to review", out)
+        code, out = run("validate", str(self.film))
+        self.assertNotIn("To fix", out)  # the edited line is not sent back to the AI
+
+
 if __name__ == "__main__":
     unittest.main()

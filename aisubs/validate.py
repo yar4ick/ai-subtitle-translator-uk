@@ -92,6 +92,7 @@ def run(project) -> tuple[list[Problem], dict]:
     """Check every translated line of the project. Return (problems, stats)."""
     checker = Checker(project.glossary())
     done, flags, speakers, retries = project.done(), project.flags(), project.speakers(), project.retries()
+    reviewed = project.reviewed()
     problems: list[Problem] = []
     stats = {"subtitles": 0, "over_cps": 0, "over_max_cps": 0}
     for k, chunk in enumerate(project.chunks):
@@ -117,6 +118,8 @@ def run(project) -> tuple[list[Problem], dict]:
             too_long = rate > limits.MAX_CPS or max(lengths) > cap
             for (key, p), length in zip(parts, lengths):
                 part = item.parts[p]
+                if key in reviewed.get(k, set()):
+                    continue  # a person has the last word
                 limit = soft[p] if too_long and (length > soft[p] or length == max(lengths)) else None
                 tried = retries.get(k, {}).get(key, 0)
                 for fix, message in checker.line(part.text, have[key], speakers.get(k, {}).get(key, ""), limit):
