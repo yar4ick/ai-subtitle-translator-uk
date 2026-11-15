@@ -116,6 +116,24 @@ class CrossCheckTest(unittest.TestCase):
 
 
 
+class GenderCheckTest(unittest.TestCase):
+    LINES = [
+        "Where's Gloria? She was here.", "Gloria said she'd call.", "Did you see her?",
+        "Mrs. Martinez is late.", "Gloria, wait!", "David, she's gone.",
+        "- Who is David?\n- Her new boyfriend.",
+    ]
+
+    def test_contradiction(self):
+        g, _ = glossary.parse("C|Г|Gloria Martinez|Глорія|ч|мати|тепла\nC|Д|David Martinez|Девід|ч|син|зухвалий\n")
+        self.assertEqual(glossary.gender_warnings(g, self.LINES), [
+            "Г Gloria Martinez: CAST says ч, but the subtitles say she/her about them (4 vs 0); check the gender"])
+
+    def test_no_warning_when_right_or_spoken_to(self):
+        g, _ = glossary.parse("C|Г|Gloria Martinez|Глорія|ж|мати|тепла\nC|Д|David Martinez|Девід|ч|син|зухвалий\n")
+        self.assertEqual(glossary.gender_warnings(g, self.LINES), [])  # "David, she's…" and "- Her…" are not about David
+        self.assertEqual(glossary.gender_evidence(self.LINES, "David"), (0, 0))
+
+
 class CommandTest(unittest.TestCase):
     def test_prepare_with_wikipedia(self):
         import shutil, tempfile

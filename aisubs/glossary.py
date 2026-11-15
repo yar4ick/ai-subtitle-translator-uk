@@ -157,9 +157,64 @@ def name_words(text: str) -> set[str]:
     return {w for w in words if len(w) > 2}
 
 
-def cross_check(g: Glossary, found: list[dict], source_words: set[str], min_count: int = 5) -> list[str]:
-    """Warnings about the glossary against the subtitles (cheap, by code)."""
+_HE_RE = re.compile(r"\b(?:he|him|his|himself)\b", re.I)
+_SHE_RE = re.compile(r"\b(?:she|her|hers|herself)\b", re.I)
+_TITLE_RE = r"\b(Mr|Mister|Mrs|Ms|Miss)\.?\s+"
+
+
+def gender_evidence(lines: list[str], name: str) -> tuple[int, int]:
+    """(he, she): pronouns after a mention of the name (not when spoken to), and Mr/Mrs before it."""
+    he = she = 0
+    plain = [re.sub(r"<[^>]+>", "", t).replace("\n", " ") for t in lines]
+    word = r"\b" + re.escape(name) + r"\b"
+    for n, t in enumerate(plain):
+        for m in re.finditer(_TITLE_RE + word, t):
+            if m.group(1) in ("Mr", "Mister"):
+                he += 2
+            else:
+                she += 2
+        for m in re.finditer(word, t):
+            # The rest of the name ("Steve Harrington") and what follows it
+            tail = re.match(r"(?:\s+[A-Z][a-z]+)*\s*([^\w\s]|$)?", t[m.end():])
+            after, before = tail.group(1), t[:m.start()].rstrip()
+            alone = not before or before.endswith((",", ".", "!", "?", "-"))
+            if after == "," or (after is not None and after in ".!?…" and alone):
+                continue  # spoken to: "David, wait", "Wait, David.", "Steve?" (but not "Where's Gloria?")
+            rest = re.split(r"\s-\s", t[m.end():])[0]  # "- Who is David? - Her …": the other speaker
+            if n + 1 < len(plain) and not plain[n + 1].lstrip().startswith("-"):
+                rest += " " + plain[n + 1]  # the same speaker goes on; "- " is someone else
+            he += len(_HE_RE.findall(rest))
+            she += len(_SHE_RE.findall(rest))
+    return he, she
+
+
+def gender_warnings(g: Glossary, lines: list[str]) -> list[str]:
+    """Characters whose gender in CAST contradicts how the subtitles speak about them."""
+    words: dict[str, list[str]] = {}
+    for row in g.cast:
+        for w in re.findall(r"[A-Z][a-z]{2,}", row[1]):
+            words.setdefault(w, []).append(row[0])
     out = []
+    for row in g.cast:
+        code, en, gender = row[0], row[1], row[3].strip(" ?")
+        if gender not in ("ч", "ж"):
+            continue
+        he = she = 0
+        for w in re.findall(r"[A-Z][a-z]{2,}", en):
+            if len(words[w]) == 1 and w not in ("Mrs", "Miss", "The"):  # a shared surname says nothing
+                a, b = gender_evidence(lines, w)
+                he, she = he + a, she + b
+        same, other = (he, she) if gender == "ч" else (she, he)
+        if (other >= 2 and not same) or (other >= 3 and other >= 3 * same):
+            out.append(f"{code} {en}: CAST says {gender}, but the subtitles say "
+                       f"{'she/her' if gender == 'ч' else 'he/him'} about them ({other} vs {same}); check the gender")
+    return out
+
+
+def cross_check(g: Glossary, found: list[dict], source_words: set[str], min_count: int = 5,
+                lines: list[str] | None = None) -> list[str]:
+    """Warnings about the glossary against the subtitles (cheap, by code)."""
+    out = gender_warnings(g, lines) if lines else []
     named = set()
     for code, en, uk, *_ in g.cast:
         words = name_words(en) - {"mrs", "the"}
