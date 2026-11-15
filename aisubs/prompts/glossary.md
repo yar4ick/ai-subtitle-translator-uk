@@ -12,4 +12,5 @@ T|english|українською
 - Ukrainian names by current orthography; keep the established Ukrainian form if the film has one.
 - P: how the first character addresses the second; one line per direction when they differ (a child to an adult, a subordinate to a boss). Note when it changes, e.g. «спершу ви, потім ти».
 - T: invented words, slang, places, organisations, nicknames, recurring catchphrases, forms of address worth fixing. Pick one rendering each.
+- A short name, nickname or surname may belong to a character you already have (Stan = Norman Stansfield): add it to that character's role, not as a new C line, unless the lines show two different people.
 - Put `?` at the end of any line you are not sure of. Do not invent characters.
