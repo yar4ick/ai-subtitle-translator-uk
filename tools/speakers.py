@@ -9,6 +9,9 @@ Development tool, not part of the package.
             14 … → David, Gloria        (a two-speaker subtitle "- A / - B")
         Leave → empty for lines you are not sure of; they are not scored.
 
+    python tools/speakers.py names film.srt labels.txt
+        Show how the names in the labels map to cast codes of the glossary.
+
     python tools/speakers.py score film.srt labels.txt
         Compare the labels with the S>A codes stored in film.aisubs/done/
         and print the metrics from docs/speaker-review.md.
@@ -17,6 +20,7 @@ Development tool, not part of the package.
 from __future__ import annotations
 
 import argparse
+import difflib
 import re
 import sys
 from pathlib import Path
@@ -65,13 +69,37 @@ def read_labels(path: Path) -> dict[int, list[str]]:
     return out
 
 
+UNNAMED = "~"  # a person who is not in the cast: the model should answer ч/ж/x, not a cast code
+_FEMALE = re.compile(r"\b(woman|girl|lady|mother|mom|wife|daughter|sister|nurse|waitress|female)\b", re.I)
+_MALE = re.compile(r"\b(man|boy|guy|father|dad|husband|son|brother|male)\b", re.I)
+
+
+def name_matcher(g: glossary.Glossary):
+    """Label -> cast code, tolerant to spelling ("Steinfild" -> Stansfield); UNNAMED otherwise."""
+    words: dict[str, str] = {}
+    for code, en, uk, *_ in g.cast:
+        words[code.lower()] = code
+        for name in (en, uk):
+            name = name.strip(" ?").lower()
+            words[name] = code
+            for w in re.findall(r"[\w']+", name):
+                if len(w) > 2 and w not in ("mrs", "mr", "dr", "detective"):
+                    words.setdefault(w, code)
+
+    def match(label: str) -> str:
+        key = label.strip().lower()
+        if key in words:
+            return words[key]
+        close = difflib.get_close_matches(key, words, n=1, cutoff=0.7)
+        return words[close[0]] if close else UNNAMED
+
+    return match
+
+
 def score(film: Path, labels_path: Path) -> str:
     project = Project(film).load()
     g = project.glossary()
-    to_code = glossary.speaker_codes(g)
-    for code, en, uk, *_ in g.cast:
-        to_code[code.lower()] = code
-        to_code[uk.strip(" ?").lower()] = code
+    match = name_matcher(g)
     gender = checks.genders(g)
     labels = read_labels(labels_path)
 
@@ -90,15 +118,19 @@ def score(film: Path, labels_path: Path) -> str:
     for n, names in sorted(labels.items()):
         parts = where.get(n, [])
         for (k, key), name in zip(parts, names):
-            expected = to_code.get(name.lower())
-            if expected is None:
-                unknown.add(name)
-                continue
+            expected = match(name)
             sa = speakers.get(k, {}).get(key)
             if sa is None:
                 continue
             s = sa.partition(">")[0]
-            rows.append((n, key, expected, checks.base_code(s), "?" in s))
+            model = checks.base_code(s)
+            if expected == UNNAMED:
+                unknown.add(name)
+                # Right if the model also used a non-cast code of a compatible gender
+                want = "ж" if _FEMALE.search(name) else "ч" if _MALE.search(name) else ""
+                if model in ("ч", "ж", "x") and (not want or model in (want, "x")):
+                    model = UNNAMED
+            rows.append((n, key, expected, model, "?" in s))
     if not rows:
         return "No labelled lines matched translated lines.\n"
 
@@ -110,7 +142,7 @@ def score(film: Path, labels_path: Path) -> str:
     same_gender = sum(bool(gender.get(e)) and gender.get(e) == gender.get(m) for _, _, e, m, _ in rows)
     sure = [r for r in rows if not r[4]]
     out = [
-        f"Labelled lines scored: {total}" + (f" (unknown names skipped: {', '.join(sorted(unknown))})" if unknown else ""),
+        f"Labelled lines scored: {total}" + (f" (not in the cast, scored as unnamed: {', '.join(sorted(unknown))})" if unknown else ""),
         f"Speaker right: {right}/{total} ({right / total:.0%})",
         f"Silent errors (wrong, no ?): {len(silent)}/{total} ({len(silent) / total:.1%})",
         f"Right among sure: {sum(r[2] == r[3] for r in sure)}/{len(sure)}",
@@ -130,6 +162,9 @@ def main() -> int:
     t.add_argument("en", type=Path)
     t.add_argument("ranges", nargs="+", help="subtitle numbers, e.g. 26-56 95-130")
     t.add_argument("-o", "--output", type=Path, required=True)
+    nm = sub.add_parser("names", help="show how label names map to cast codes")
+    nm.add_argument("film", type=Path)
+    nm.add_argument("labels", type=Path)
     s = sub.add_parser("score")
     s.add_argument("film", type=Path, help="the prepared and translated .srt")
     s.add_argument("labels", type=Path)
@@ -140,6 +175,13 @@ def main() -> int:
             sys.exit(f"{args.output} exists; not overwriting labels")
         args.output.write_text(template(args.en, args.ranges), encoding="utf-8")
         print(f"Wrote {args.output}")
+    elif args.command == "names":
+        g = Project(args.film).load().glossary()
+        match = name_matcher(g)
+        cast = {c[0]: c[1] for c in g.cast}
+        for name in sorted({n for v in read_labels(args.labels).values() for n in v}):
+            code = match(name)
+            print(f"{name:<24} -> {code} {cast.get(code, '(not in cast)')}")
     else:
         sys.stdout.write(score(args.film, args.labels))
     return 0
