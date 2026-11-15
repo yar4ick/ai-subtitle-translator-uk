@@ -16,6 +16,7 @@ request carries a compact rendering of the glossary.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -126,7 +127,7 @@ def speaker_codes(g: Glossary) -> dict[str, str]:
     return out
 
 
-def build_request(title: str, found: list[dict], sample: list[str]) -> str:
+def build_request(title: str, found: list[dict], sample: list[str], extra: str = "") -> str:
     out = [(PROMPTS / "glossary.md").read_text(encoding="utf-8").replace("{title}", title).strip(), "", "CANDIDATES (name ×count, how often used to address someone; examples):"]
     for c in found:
         notes = []
@@ -138,6 +139,39 @@ def build_request(title: str, found: list[dict], sample: list[str]) -> str:
         if c["examples"]:
             line += ": " + " / ".join(c["examples"])
         out.append(line)
+    if extra:
+        out += ["", extra.rstrip()]
     out += ["", "SAMPLE:"] + sample
     return "\n".join(out) + "\n"
+
+
+# Forms of address, not names: no glossary entry needed
+_ADDRESS = set("mom mommy mama mum mother dad daddy papa father sir ma'am madam man dude bro honey sweetie sweetheart "
+               "baby babe kid kids guys boy girl buddy pal mister miss lady son darling".split())
+
+
+def name_words(text: str) -> set[str]:
+    """Lowercase words of a name, accents removed: "Léon Lando" -> {"leon", "lando"}."""
+    plain = "".join(ch for ch in unicodedata.normalize("NFKD", text) if not unicodedata.combining(ch))
+    words = (re.sub(r"'s$", "", w.lower()).strip("'") for w in re.findall(r"[A-Za-z']+", plain))
+    return {w for w in words if len(w) > 2}
+
+
+def cross_check(g: Glossary, found: list[dict], source_words: set[str], min_count: int = 5) -> list[str]:
+    """Warnings about the glossary against the subtitles (cheap, by code)."""
+    out = []
+    named = set()
+    for code, en, uk, *_ in g.cast:
+        words = name_words(en) - {"mrs", "the"}
+        named |= words
+        if words and not words & source_words:
+            out.append(f"{code} {en}: the name never occurs in the subtitles (another film? a guess?)")
+    for c in found:
+        words = name_words(c["name"]) - _ADDRESS
+        count = max(c.get("count", 0), c.get("speaker", 0))
+        # A short form of a known name counts as known: Stan -> Stansfield
+        known = any(n.startswith(w) for w in words for n in named)
+        if count >= min_count and words and not known and not any(w in t[0].lower() for t in g.terms for w in words):
+            out.append(f"{c['name']} occurs {count} times but is not in CAST or TERMS")
+    return out
 

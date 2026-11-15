@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from . import candidates, exchange, glossary, prepare, srt
+from . import candidates, exchange, glossary, prepare, srt, wiki
 
 FORMAT_VERSION = 1
 
@@ -52,9 +52,38 @@ class Project:
         tmp.write_text(glossary.dumps(g), encoding="utf-8")
         tmp.replace(self.glossary_path)
 
+    @property
+    def wikipedia_path(self) -> Path:
+        return self.dir / "wikipedia.txt"
+
+    def source_names(self) -> set[str]:
+        """Words written with a capital letter in the subtitles, as in glossary.name_words."""
+        text = " ".join(f"{p.text} {(p.speaker or '').title()}" for item in self.items for p in item.parts)
+        return glossary.name_words(" ".join(re.findall(r"\b[A-ZÀ-Ý][\w']+", text)))
+
+    def candidates(self) -> dict:
+        return json.loads((self.dir / "candidates.json").read_text(encoding="utf-8"))
+
     def glossary_request(self) -> str:
-        data = json.loads((self.dir / "candidates.json").read_text(encoding="utf-8"))
-        return glossary.build_request(self.meta["title"], data["candidates"], data["sample"])
+        data = self.candidates()
+        extra = self.wikipedia_path.read_text(encoding="utf-8") if self.wikipedia_path.exists() else ""
+        return glossary.build_request(self.meta["title"], data["candidates"], data["sample"], extra)
+
+    def fetch_wikipedia(self, page: str | None = None) -> str:
+        """Save the cast from Wikipedia for the glossary request. Return a message for the user."""
+        try:
+            en_title, en, uk_title, uk = wiki.fetch(self.meta["title"], page or None)
+        except wiki.WikiError as e:
+            return f"Wikipedia: skipped ({e})"
+        if not en and not uk:
+            return f"Wikipedia: no cast section found in «{en_title}»; skipped"
+        en, share = wiki.check(en, self.source_names())
+        self.wikipedia_path.write_text(wiki.render(en_title, en, uk_title, uk), encoding="utf-8")
+        message = f"Wikipedia: {len(en)} cast entries from «{en_title}»" + (f", {len(uk)} from «{uk_title}»" if uk else "")
+        if en and share < 0.3:
+            message += (f"\nwarning: only {share:.0%} of these characters occur in the subtitles; this may be another film."
+                        f" Check {self.wikipedia_path}, or give the page: --wikipedia \"Exact article title\"")
+        return message
 
     def output_path(self) -> Path:
         stem = re.sub(r"[._-](en|eng|english)$", "", self.film.stem, flags=re.IGNORECASE)
@@ -74,8 +103,10 @@ class Project:
         self.done_dir.mkdir(exist_ok=True)
         for old in self.done_dir.glob("*.json"):
             old.unlink()
-        if self.glossary_path.exists() and force:
-            self.glossary_path.unlink()
+        if force:
+            for old in (self.glossary_path, self.wikipedia_path, self.dir / "report.txt", self.dir / "review.txt"):
+                if old.exists():
+                    old.unlink()
         self.meta = {
             "format": FORMAT_VERSION,
             "prompt_version": exchange.PROMPT_VERSION,
