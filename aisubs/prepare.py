@@ -214,6 +214,9 @@ def guess_title(filename: str) -> str:
     """'The.One.I.Love.2014.LIMITED.720p...' -> 'The One I Love (2014)'."""
     stem = re.sub(r"\.srt$", "", filename, flags=re.IGNORECASE)
     words = re.split(r"[._ ]+", stem)
+    # A language tag at the end: "Film.S01E01.en.srt"
+    while len(words) > 1 and words[-1].lower() in ("en", "eng", "english"):
+        words.pop()
     # The last year-like word, so "Blade.Runner.2049.2017" gives 2017
     for k in range(len(words) - 1, 0, -1):
         if re.fullmatch(r"(19|20)\d\d", words[k]):
