@@ -145,6 +145,22 @@ class Project:
                 out[k] = json.loads(path.read_text(encoding="utf-8")).get("speakers", {})
         return out
 
+    def set_refused(self, k: int, refused: bool) -> None:
+        marks = set(self.meta.get("refused", []))
+        new = marks | {k} if refused else marks - {k}
+        if new != marks:
+            self.meta["refused"] = sorted(new)
+            _write_json(self.dir / "meta.json", self.meta)
+
+    def retries(self) -> dict[int, dict[str, int]]:
+        """Part -> {key: how many times the line was sent back by `fix`}."""
+        out = {}
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                out[k] = json.loads(path.read_text(encoding="utf-8")).get("retries", {})
+        return out
+
     def keys(self, k: int) -> list[str]:
         return [key for key, _, _ in exchange.chunk_keys(self.items, self.chunks[k])]
 
@@ -156,8 +172,8 @@ class Project:
         done = self.done()
         return next((k for k in range(len(self.chunks)) if not self.is_complete(k, done)), None)
 
-    def save(self, k: int, answer: dict[str, tuple[str, bool, str]], notes: list | None = None) -> dict:
-        """Merge accepted lines into chunk k. Return a report."""
+    def save(self, k: int, answer: dict[str, tuple[str, bool, str]], notes: list | None = None, *, retry: bool = False) -> dict:
+        """Merge accepted lines into chunk k (counting a retry for each with `retry`). Return a report."""
         expected = self.keys(k)
         path = self._done_path(k)
         record = {"items": {}, "flags": [], "speakers": {}}
@@ -178,6 +194,9 @@ class Project:
                 record["flags"].append(key)
             elif not flagged and key in record["flags"]:
                 record["flags"].remove(key)
+            if retry:
+                record.setdefault("retries", {})
+                record["retries"][key] = record["retries"].get(key, 0) + 1
             accepted.append(key)
         order = {key: n for n, key in enumerate(expected)}
         record["items"] = dict(sorted(record["items"].items(), key=lambda kv: order[kv[0]]))
