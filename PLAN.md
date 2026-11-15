@@ -18,7 +18,7 @@ CLI-команда: `aisubs`.
 
 | Користувач | Як працює |
 |---|---|
-| Claude Pro/Max | Плагін Claude Code: `/plugin marketplace add yar4ick/ai-subtitle-translator-uk`, `/plugin install <plugin>@<marketplace>`, далі `/aisubs:translate film.srt`. Скіл викликає `aisubs` з папки плагіна (тому лише stdlib — нічого не треба встановлювати) і дотримується `aisubs guide` |
+| Claude Pro/Max | Плагін Claude Code: `/plugin marketplace add yar4ick/ai-subtitle-translator-uk`, `/plugin install aisubs@aisubs`, далі `/aisubs:translate film.srt`. Скіл викликає `aisubs` з папки плагіна (тому лише stdlib — нічого не треба встановлювати) і дотримується `aisubs guide` |
 | ChatGPT (Codex CLI), Gemini CLI, інші агенти | `pipx install git+https://github.com/yar4ick/ai-subtitle-translator-uk`, далі фраза «виконай `aisubs guide film.srt`…» |
 | Тільки веб-чат | `aisubs next` друкує готовий до вставки промпт, `aisubs import` приймає вставлену відповідь |
 | API-ключ (пізніше) | `--backend anthropic/openai`, необов'язково |
