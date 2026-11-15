@@ -72,6 +72,8 @@ def read_labels(path: Path) -> dict[int, list[str]]:
 UNNAMED = "~"  # a person who is not in the cast: the model should answer ч/ж/x, not a cast code
 _FEMALE = re.compile(r"\b(woman|girl|lady|mother|mom|wife|daughter|sister|nurse|waitress|female)\b", re.I)
 _MALE = re.compile(r"\b(man|boy|guy|father|dad|husband|son|brother|male)\b", re.I)
+# Not a person in the scene: the model should answer `-`
+_OFFSCREEN = re.compile(r"\b(tv|radio|robot|machine|computer|announcer|narrator|presenter|news|sign|song|caption|voice ?mail)\b", re.I)
 
 
 def name_matcher(g: glossary.Glossary):
@@ -87,6 +89,8 @@ def name_matcher(g: glossary.Glossary):
                     words.setdefault(w, code)
 
     def match(label: str) -> str:
+        if _OFFSCREEN.search(label):
+            return "-"
         key = label.strip().lower()
         if key in words:
             return words[key]
@@ -139,7 +143,8 @@ def score(film: Path, labels_path: Path) -> str:
     wrong = [r for r in rows if r[2] != r[3]]
     silent = [r for r in wrong if not r[4]]
     unsure = [r for r in rows if r[4]]
-    same_gender = sum(bool(gender.get(e)) and gender.get(e) == gender.get(m) for _, _, e, m, _ in rows)
+    gendered = [(e, m) for _, _, e, m, _ in rows if gender.get(e)]
+    same_gender = sum(gender[e] == gender.get(m) for e, m in gendered)
     sure = [r for r in rows if not r[4]]
     out = [
         f"Labelled lines scored: {total}" + (f" (not in the cast, scored as unnamed: {', '.join(sorted(unknown))})" if unknown else ""),
@@ -147,7 +152,7 @@ def score(film: Path, labels_path: Path) -> str:
         f"Silent errors (wrong, no ?): {len(silent)}/{total} ({len(silent) / total:.1%})",
         f"Right among sure: {sum(r[2] == r[3] for r in sure)}/{len(sure)}",
         f"Marked ?: {len(unsure)}, of them wrong: {sum(r[2] != r[3] for r in unsure)}; wrong lines marked: {len(wrong) - len(silent)}/{len(wrong)}",
-        f"Speaker gender right: {same_gender}/{total}",
+        f"Speaker gender right: {same_gender}/{len(gendered)} (lines of cast members)",
         "",
         "Wrong lines (number, key, expected, model):",
     ]
@@ -178,7 +183,7 @@ def main() -> int:
     elif args.command == "names":
         g = Project(args.film).load().glossary()
         match = name_matcher(g)
-        cast = {c[0]: c[1] for c in g.cast}
+        cast = {c[0]: c[1] for c in g.cast} | {"-": "(narration, TV, machines)"}
         for name in sorted({n for v in read_labels(args.labels).values() for n in v}):
             code = match(name)
             print(f"{name:<24} -> {code} {cast.get(code, '(not in cast)')}")
