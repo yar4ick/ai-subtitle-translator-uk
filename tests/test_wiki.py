@@ -98,6 +98,15 @@ class FetchTest(unittest.TestCase):
             self.assertEqual(wiki.find_article("Stranger Things S01E01 (2016)"), "Stranger Things")
         self.assertEqual(seen, ["Stranger Things 2016 TV series"])
 
+    def test_prefers_the_closest_title(self):
+        hits = [{"title": "Cyberpunk: Edgerunners 2"}, {"title": "Cyberpunk 2077"}, {"title": "Cyberpunk: Edgerunners"}]
+        with mock.patch.object(wiki, "_api", lambda host, **p: {"query": {"search": hits}}):
+            self.assertEqual(wiki.find_article("Cyberpunk Edgerunners S01E01"), "Cyberpunk: Edgerunners")
+        hits = [{"title": "Blade Runner 2049"}, {"title": "Blade Runner"}]
+        with mock.patch.object(wiki, "_api", lambda host, **p: {"query": {"search": hits}}):
+            self.assertEqual(wiki.find_article("Blade Runner 2049 (2017)"), "Blade Runner 2049")
+            self.assertEqual(wiki.find_article("Blade Runner (1982)"), "Blade Runner")
+
     def test_no_match(self):
         with mock.patch.object(wiki, "_api", lambda host, **p: {"query": {"search": [{"title": "Something Else"}]}}):
             with self.assertRaises(wiki.WikiError):

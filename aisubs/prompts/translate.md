@@ -30,7 +30,7 @@ LENGTH
 
 LANGUAGE
 - Living spoken Ukrainian in the register of the film and of each character. Render idioms, insults and exclamations by function, with what a Ukrainian would say there. No calques, no Russianisms, no surzhyk.
-- Swearing: keep its strength with natural Ukrainian swearing; do not soften and do not add. Mild (damn, hell, crap): чорт, дідько, трясця. Strong (shit, fuck, bitch, ass): лайно, бляха, курва, бля, нахуй, сука, дупа — not «блін» or «чорт».
+- Swearing: keep its strength with natural Ukrainian swearing; do not soften and do not add. Mild (damn, hell, crap): чорт, дідько, трясця. Strong (shit, fuck, bitch, ass): бля, бляха, курва, сука, нахуй, дупа — not «блін» or «чорт». An exclamation is rendered by an exclamation («Shit!» → «Бляха!» or «Бля!»), not by the dictionary word («Лайно!»).
 - GLOSSARY, when given, is binding: the gender of S and A from CAST, ти/ви from PAIRS.
 - Names and terms exactly as in CAST and TERMS; otherwise Ukrainian transliteration, consistent across the film. If you coin a rendering for a new recurring name or term, add a final line `+|english=українською`.
 - «» for quotes, … for ellipsis, — for a dash. Numbers one to ten in words, larger numbers in digits.

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.parse
+import unicodedata
 import urllib.request
 
 from .glossary import name_words
@@ -148,10 +149,20 @@ def find_article(title: str) -> str:
     name = _YEAR_RE.sub("", _TV_RE.sub("", title)).strip(" -.")
     query = f"{name} {year} {'TV series' if is_tv else 'film'}".strip()
     hits = _api("en.wikipedia.org", action="query", list="search", srsearch=query, srlimit=5)["query"]["search"]
-    words = {w for w in re.findall(r"\w+", name.lower()) if len(w) > 2}
-    for hit in hits:
-        if words and words <= set(re.findall(r"\w+", hit["title"].lower())) | {"the"}:
-            return hit["title"]
+    def plain(text: str) -> str:
+        return "".join(ch for ch in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(ch))
+
+    words = {w for w in re.findall(r"\w+", plain(name)) if len(w) > 2}
+    # Of the hits that have every word of the name, the one with the fewest other words:
+    # «Cyberpunk: Edgerunners (TV series)» rather than «Cyberpunk: Edgerunners 2»
+    found = []
+    for n, hit in enumerate(hits):
+        title = {w for w in re.findall(r"\w+", plain(hit["title"])) if len(w) > 2 or w.isdigit()}
+        if words and words <= title | {"the"}:
+            extra = title - words - {"the", "film", "tv", "series", "miniseries", "anime", "web"} - {year}
+            found.append((len(extra), n, hit["title"]))
+    if found:
+        return min(found)[2]
     raise WikiError(f"no Wikipedia article found for {name!r}")
 
 
