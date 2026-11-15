@@ -27,7 +27,7 @@ def fake_translate(request: str, drop: str | None = None) -> str:
     """Answer every TRANSLATE line with "UK:" + text, optionally leaving one key out."""
     body = request.split("TRANSLATE")[1].split("CONTEXT (following")[0]
     lines = []
-    for key, text in re.findall(r"^(\d+[a-z]?)\|(.*)$", body, re.M):
+    for key, text in re.findall(r"^(\d+[a-z]?)\|(?:S=[^|]+\|)?(?:≤\d+\|)?(.*)$", body, re.M):
         if key != drop:
             lines.append(f"{key}|UK:{text}")
     return "```\n" + "\n".join(lines) + "\n```\n"
@@ -85,13 +85,43 @@ class EndToEndTest(unittest.TestCase):
         self.assertNotIn("warning", out)
         _, request = run("next", str(film))
         self.assertIn("1|This blade has a dark past.", request)
-        self.assertIn("3|You're a fool for traveling alone, so completely unprepared.", request)
+        self.assertIn("3|≤58|You're a fool for traveling alone, so completely unprepared.", request)
+        self.assertIn("4|You're lucky your blood's still flowing.", request)
         run("import", str(film), stdin=fake_translate(request))
         code, out = run("assemble", str(film))
         self.assertEqual(code, 0, out)
         result = srt.read(self.tmp / "sintel.uk.srt")
         self.assertEqual(len(result.cues), 26)
         self.assertEqual(result.warnings, [])
+
+    def test_import_next_prints_the_next_request(self):
+        run("prepare", str(self.film), "--chunk-size", "3")
+        _, request = run("next", str(self.film))
+        code, out = run("import", str(self.film), "--next", stdin=fake_translate(request))
+        self.assertEqual(code, 0)
+        self.assertIn("TRANSLATE (part 2 of", out)
+        self.assertNotIn("Translate film subtitles", out)
+        _, request = run("next", str(self.film))
+        code, out = run("import", str(self.film), "--next", stdin=fake_translate(request, drop="1"))
+        self.assertEqual(code, 2)
+        self.assertIn("TRANSLATE (part 2 of", out)
+
+    def test_glossary_flow(self):
+        run("prepare", str(self.film))
+        code, request = run("glossary", str(self.film))
+        self.assertIn("Build a translation glossary", request)
+        self.assertIn("\nMarta: Nobody comes here anymore.\n", request)  # SDH speaker kept in the sample
+        code, out = run("glossary", str(self.film), "-", stdin="C|М|Marta|Марта|ж|доглядачка маяка|сувора\nT|lighthouse|маяк\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 characters, 0 pairs, 1 terms", out)
+        _, request = run("next", str(self.film))
+        self.assertIn("GLOSSARY\nCAST (code name — gender; role; voice):\nМ Марта (Marta) — ж; доглядачка маяка; сувора\nTERMS: lighthouse=маяк\n", request)
+        _, brief = run("next", str(self.film), "--brief")
+        self.assertNotIn("GLOSSARY", brief)
+        answer = fake_translate(request) + "+|keeper=доглядач\n"
+        code, out = run("import", str(self.film), stdin=answer)
+        self.assertIn("glossary: added keeper=доглядач", out)
+        self.assertNotIn("ignored", out)
 
     def test_prepare_refuses_to_overwrite_translations(self):
         run("prepare", str(self.film))

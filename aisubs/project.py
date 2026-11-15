@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from . import exchange, prepare, srt
+from . import candidates, exchange, glossary, prepare, srt
 
 FORMAT_VERSION = 1
 
@@ -38,6 +38,24 @@ class Project:
     def done_dir(self) -> Path:
         return self.dir / "done"
 
+    @property
+    def glossary_path(self) -> Path:
+        return self.dir / "glossary.txt"
+
+    def glossary(self) -> glossary.Glossary:
+        if not self.glossary_path.exists():
+            return glossary.Glossary()
+        return glossary.parse(self.glossary_path.read_text(encoding="utf-8"))[0]
+
+    def save_glossary(self, g: glossary.Glossary) -> None:
+        tmp = self.glossary_path.with_suffix(".tmp")
+        tmp.write_text(glossary.dumps(g), encoding="utf-8")
+        tmp.replace(self.glossary_path)
+
+    def glossary_request(self) -> str:
+        data = json.loads((self.dir / "candidates.json").read_text(encoding="utf-8"))
+        return glossary.build_request(self.meta["title"], data["candidates"], data["sample"])
+
     def output_path(self) -> Path:
         stem = re.sub(r"[._-](en|eng|english)$", "", self.film.stem, flags=re.IGNORECASE)
         return self.film.with_name(stem + ".uk.srt")
@@ -56,6 +74,8 @@ class Project:
         self.done_dir.mkdir(exist_ok=True)
         for old in self.done_dir.glob("*.json"):
             old.unlink()
+        if self.glossary_path.exists() and force:
+            self.glossary_path.unlink()
         self.meta = {
             "format": FORMAT_VERSION,
             "prompt_version": exchange.PROMPT_VERSION,
@@ -73,6 +93,10 @@ class Project:
         }
         self.items, self.chunks = items, chunks
         _write_json(self.dir / "cues.json", [prepare.item_to_dict(i) for i in items])
+        _write_json(self.dir / "candidates.json", {
+            "candidates": [candidates.to_dict(c) for c in candidates.find(items)],
+            "sample": candidates.sample(items, scene_gap),
+        })
         _write_json(self.dir / "meta.json", self.meta)
         return parsed
 
@@ -113,6 +137,14 @@ class Project:
                 out[k] = json.loads(path.read_text(encoding="utf-8"))["flags"]
         return out
 
+    def speakers(self) -> dict[int, dict[str, str]]:
+        out = {}
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                out[k] = json.loads(path.read_text(encoding="utf-8")).get("speakers", {})
+        return out
+
     def keys(self, k: int) -> list[str]:
         return [key for key, _, _ in exchange.chunk_keys(self.items, self.chunks[k])]
 
@@ -124,21 +156,24 @@ class Project:
         done = self.done()
         return next((k for k in range(len(self.chunks)) if not self.is_complete(k, done)), None)
 
-    def save(self, k: int, answer: dict[str, tuple[str, bool]]) -> dict:
+    def save(self, k: int, answer: dict[str, tuple[str, bool, str]], notes: list | None = None) -> dict:
         """Merge accepted lines into chunk k. Return a report."""
         expected = self.keys(k)
         path = self._done_path(k)
-        record = {"items": {}, "flags": []}
+        record = {"items": {}, "flags": [], "speakers": {}}
         if path.exists():
             record = json.loads(path.read_text(encoding="utf-8"))
+            record.setdefault("speakers", {})
         accepted, empty = [], []
-        for key, (text, flagged) in answer.items():
+        for key, (text, flagged, speakers) in answer.items():
             if key not in expected:
                 continue
             if not text.strip():
                 empty.append(key)
                 continue
             record["items"][key] = text.strip()
+            if speakers:
+                record["speakers"][key] = speakers
             if flagged and key not in record["flags"]:
                 record["flags"].append(key)
             elif not flagged and key in record["flags"]:
@@ -147,6 +182,9 @@ class Project:
         order = {key: n for n, key in enumerate(expected)}
         record["items"] = dict(sorted(record["items"].items(), key=lambda kv: order[kv[0]]))
         record["flags"].sort(key=order.get)
+        if notes:
+            record.setdefault("notes", [])
+            record["notes"] += [list(n) for n in notes if list(n) not in record["notes"]]
         record["prompt_version"] = exchange.PROMPT_VERSION
         record["sha256"] = self.meta["sha256"]
         if accepted:

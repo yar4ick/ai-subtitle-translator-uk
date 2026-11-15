@@ -13,3 +13,9 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+
+# Evaluation material (copyrighted subtitles), local only
+eval/
+
+# Working notes and reviews, local only
+docs/
