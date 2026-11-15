@@ -16,3 +16,6 @@ dist/
 
 # Evaluation material (copyrighted subtitles), local only
 eval/
+
+# Working notes and reviews, local only
+docs/
