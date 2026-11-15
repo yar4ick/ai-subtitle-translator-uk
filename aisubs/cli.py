@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, assemble, exchange, glossary, srt
+from . import __version__, assemble, checks, exchange, glossary, srt
 from .project import Project, ProjectError
 
 
@@ -110,6 +110,15 @@ def cmd_import(args) -> int:
     answer, ignored = exchange.parse_answer(text)
     report = project.save(k, answer)
     print(f"part {k + 1}/{len(project.chunks)}: accepted {len(report['accepted'])} lines")
+    cast = checks.genders(project.glossary())
+    conflicts = [
+        (key, problem)
+        for key in report["accepted"]
+        if answer[key][2]
+        for problem in checks.gender_conflicts(answer[key][0], answer[key][2], cast)
+    ]
+    for key, problem in conflicts:
+        print(f"gender check: {key}|{answer[key][2]}|{answer[key][0]} — {problem}")
     if additions := glossary.parse_additions(text):
         g = project.glossary()
         if added := glossary.add_terms(g, additions):

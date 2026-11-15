@@ -137,6 +137,14 @@ class Project:
                 out[k] = json.loads(path.read_text(encoding="utf-8"))["flags"]
         return out
 
+    def speakers(self) -> dict[int, dict[str, str]]:
+        out = {}
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                out[k] = json.loads(path.read_text(encoding="utf-8")).get("speakers", {})
+        return out
+
     def keys(self, k: int) -> list[str]:
         return [key for key, _, _ in exchange.chunk_keys(self.items, self.chunks[k])]
 
@@ -148,21 +156,24 @@ class Project:
         done = self.done()
         return next((k for k in range(len(self.chunks)) if not self.is_complete(k, done)), None)
 
-    def save(self, k: int, answer: dict[str, tuple[str, bool]]) -> dict:
+    def save(self, k: int, answer: dict[str, tuple[str, bool, str]]) -> dict:
         """Merge accepted lines into chunk k. Return a report."""
         expected = self.keys(k)
         path = self._done_path(k)
-        record = {"items": {}, "flags": []}
+        record = {"items": {}, "flags": [], "speakers": {}}
         if path.exists():
             record = json.loads(path.read_text(encoding="utf-8"))
+            record.setdefault("speakers", {})
         accepted, empty = [], []
-        for key, (text, flagged) in answer.items():
+        for key, (text, flagged, speakers) in answer.items():
             if key not in expected:
                 continue
             if not text.strip():
                 empty.append(key)
                 continue
             record["items"][key] = text.strip()
+            if speakers:
+                record["speakers"][key] = speakers
             if flagged and key not in record["flags"]:
                 record["flags"].append(key)
             elif not flagged and key in record["flags"]:

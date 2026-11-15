@@ -8,7 +8,7 @@ from pathlib import Path
 from . import limits
 from .prepare import Item
 
-PROMPT_VERSION = 3
+PROMPT_VERSION = 4
 PROMPTS = Path(__file__).parent / "prompts"
 CONTEXT_BEFORE = 5
 CONTEXT_AFTER = 3
@@ -18,6 +18,8 @@ TIGHT_RATIO = 0.85  # mark a line with its budget when the English uses more tha
 _ANSWER_RE = re.compile(r"^\s*(\|)?\s*\**(\d+[a-z]?)\**\s*(\?)?\s*\|\s?(.*?)\s*$")
 _TABLE_RULE_RE = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
 _ECHOED_BUDGET_RE = re.compile(r"^≤\d+\|\s?")
+# Who speaks to whom: "Д>Гл|text", "?>М|text", "-|text" is not used, narration is "->-"
+_SPEAKERS_RE = re.compile(r"^([^\s|>]{1,4})\s*>\s*([^\s|>]{1,4})\s*\|\s?")
 
 
 def chunk_keys(items: list[Item], chunk: tuple[int, int]) -> list[tuple[str, int, int]]:
@@ -86,12 +88,13 @@ def build_request(
     return "\n".join(out) + "\n"
 
 
-def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool]], list[str]]:
-    """Read `key|translation` lines, tolerating code fences, tables and chatter.
+def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool, str]], list[str]]:
+    """Read `key|S>A|translation` lines (S>A optional), tolerating code fences, tables and chatter.
 
-    Return ({key: (text, flagged)}, ignored non-empty lines).
+    Return ({key: (text, flagged, "S>A" or "")}, ignored non-empty lines).
+    A line is flagged when S or A is `?` (or, as in prompt v1, `key?|`).
     """
-    result: dict[str, tuple[str, bool]] = {}
+    result: dict[str, tuple[str, bool, str]] = {}
     ignored = []
     for line in text.splitlines():
         if not line.strip() or line.strip().startswith("```") or _TABLE_RULE_RE.match(line):
@@ -105,5 +108,9 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool]], list[str]]:
         if table and body.endswith("|"):
             body = body[:-1].rstrip()
         body = _ECHOED_BUDGET_RE.sub("", body)
-        result[key] = (body, bool(flag))
+        speakers = ""
+        if m := _SPEAKERS_RE.match(body):
+            speakers, body = f"{m.group(1)}>{m.group(2)}", body[m.end():]
+            flag = flag or "?" in speakers
+        result[key] = (body, bool(flag), speakers)
     return result, ignored

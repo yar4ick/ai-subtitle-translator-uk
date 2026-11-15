@@ -58,27 +58,37 @@ class RequestTest(unittest.TestCase):
 class ParseAnswerTest(unittest.TestCase):
     def test_plain(self):
         answer, ignored = exchange.parse_answer("1|Один\n2a|Так.\n2b?|Ти прийшла?\n")
-        self.assertEqual(answer, {"1": ("Один", False), "2a": ("Так.", False), "2b": ("Ти прийшла?", True)})
+        self.assertEqual(answer, {"1": ("Один", False, ""), "2a": ("Так.", False, ""), "2b": ("Ти прийшла?", True, "")})
         self.assertEqual(ignored, [])
 
     def test_fence_and_chatter(self):
         answer, ignored = exchange.parse_answer("Ось переклад:\n```\n1|Один\n```\nГотово!")
-        self.assertEqual(answer, {"1": ("Один", False)})
+        self.assertEqual(answer, {"1": ("Один", False, "")})
         self.assertEqual(ignored, ["Ось переклад:", "Готово!"])
 
     def test_table(self):
         answer, _ = exchange.parse_answer("| ID | Переклад |\n|---|---|\n| 1 | Один |\n| 2? | Два |")
-        self.assertEqual(answer, {"1": ("Один", False), "2": ("Два", True)})
+        self.assertEqual(answer, {"1": ("Один", False, ""), "2": ("Два", True, "")})
 
     def test_pipe_inside_text_and_bold_id(self):
         answer, _ = exchange.parse_answer("**3**|Так | ні\n4 ? | Хто?")
-        self.assertEqual(answer, {"3": ("Так | ні", False), "4": ("Хто?", True)})
+        self.assertEqual(answer, {"3": ("Так | ні", False, ""), "4": ("Хто?", True, "")})
 
     def test_echoed_budget_is_removed(self):
-        self.assertEqual(exchange.parse_answer("1|≤17|Тікай звідти!")[0], {"1": ("Тікай звідти!", False)})
+        self.assertEqual(exchange.parse_answer("1|≤17|Тікай звідти!")[0], {"1": ("Тікай звідти!", False, "")})
+
+    def test_speakers(self):
+        answer, _ = exchange.parse_answer("1|Д>Гл|Забула?\n2|?>М|Хто там?\n3|≤20|-> -|Новини\n4|Гл > Д | Так.")
+        self.assertEqual(answer["1"], ("Забула?", False, "Д>Гл"))
+        self.assertEqual(answer["2"], ("Хто там?", True, "?>М"))
+        self.assertEqual(answer["3"], ("Новини", False, "->-"))
+        self.assertEqual(answer["4"], ("Так.", False, "Гл>Д"))
+
+    def test_text_with_arrow_is_not_speakers(self):
+        self.assertEqual(exchange.parse_answer("1|Два > один, ясно?")[0]["1"], ("Два > один, ясно?", False, ""))
 
     def test_question_mark_in_text_is_not_a_flag(self):
-        self.assertEqual(exchange.parse_answer("5|Де ти?")[0], {"5": ("Де ти?", False)})
+        self.assertEqual(exchange.parse_answer("5|Де ти?")[0], {"5": ("Де ти?", False, "")})
 
 
 if __name__ == "__main__":
