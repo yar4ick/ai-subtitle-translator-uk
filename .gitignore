@@ -1,0 +1,15 @@
+# Subtitle files are usually copyrighted: never commit them
+*.srt
+!tests/fixtures/*.srt
+
+# Translation working folders
+*.aisubs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
