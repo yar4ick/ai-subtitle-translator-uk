@@ -156,7 +156,7 @@ class Project:
         done = self.done()
         return next((k for k in range(len(self.chunks)) if not self.is_complete(k, done)), None)
 
-    def save(self, k: int, answer: dict[str, tuple[str, bool, str]]) -> dict:
+    def save(self, k: int, answer: dict[str, tuple[str, bool, str]], notes: list | None = None) -> dict:
         """Merge accepted lines into chunk k. Return a report."""
         expected = self.keys(k)
         path = self._done_path(k)
@@ -182,6 +182,9 @@ class Project:
         order = {key: n for n, key in enumerate(expected)}
         record["items"] = dict(sorted(record["items"].items(), key=lambda kv: order[kv[0]]))
         record["flags"].sort(key=order.get)
+        if notes:
+            record.setdefault("notes", [])
+            record["notes"] += [list(n) for n in notes if list(n) not in record["notes"]]
         record["prompt_version"] = exchange.PROMPT_VERSION
         record["sha256"] = self.meta["sha256"]
         if accepted:

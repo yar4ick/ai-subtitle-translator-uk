@@ -27,7 +27,7 @@ def fake_translate(request: str, drop: str | None = None) -> str:
     """Answer every TRANSLATE line with "UK:" + text, optionally leaving one key out."""
     body = request.split("TRANSLATE")[1].split("CONTEXT (following")[0]
     lines = []
-    for key, text in re.findall(r"^(\d+[a-z]?)\|(?:≤\d+\|)?(.*)$", body, re.M):
+    for key, text in re.findall(r"^(\d+[a-z]?)\|(?:S=[^|]+\|)?(?:≤\d+\|)?(.*)$", body, re.M):
         if key != drop:
             lines.append(f"{key}|UK:{text}")
     return "```\n" + "\n".join(lines) + "\n```\n"

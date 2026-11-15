@@ -27,6 +27,11 @@ class GenderTest(unittest.TestCase):
         self.assertEqual(self.check("Я хотів сказати.", "?>Д"), [])
         self.assertEqual(self.check("Я хотів сказати.", "ж>ч"), ["«я хотів», but S is ж"])
 
+    def test_codes_with_doubt_or_numbers(self):
+        self.assertEqual(self.check("Я хотів сказати.", "Гл?>Д"), ["«я хотів», but S is ж"])
+        self.assertEqual(self.check("Я хотіла сказати.", "ч1>Д"), ["«я хотіла», but S is ч"])
+        self.assertEqual(self.check("Я хотіла сказати.", "x>Д"), [])
+
     def test_genders_from_glossary(self):
         from aisubs.glossary import Glossary
         g = Glossary(cast=[["Гл", "Gloria", "Глорія", "ж", "", ""], ["Ло", "Lonnie", "Лонні", "ч?", "", ""]])

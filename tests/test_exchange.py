@@ -49,6 +49,13 @@ class RequestTest(unittest.TestCase):
         text = exchange.build_request(self.items, self.chunks, 1, done, "F", brief=True)
         self.assertTrue(text.startswith("TRANSLATE (part 2 of 3):\n1|Three\n"))
 
+    def test_scene_breaks_and_sdh_speakers(self):
+        its = items("One", "Two", "Three")
+        its[1].parts[0].speaker = "Gloria"
+        its[2].parts[0].speaker = "Maine"
+        text = exchange.build_request(its, [(0, 3)], 0, {}, "F", brief=True, scene_starts=frozenset({1}), speaker_codes={"gloria": "Гл"})
+        self.assertIn("1|One\n=\n2|S=Гл|Two\n3|S=Maine|Three\n", text)
+
     def test_tight_lines_get_a_budget(self):
         its = [Item(0, 1000, [Part("You have got to get out of there right now!")]), Item(2000, 5000, [Part("Okay.")])]
         text = exchange.build_request(its, [(0, 2)], 0, {}, "F", brief=True)
@@ -90,6 +97,14 @@ class ParseAnswerTest(unittest.TestCase):
 
     def test_text_with_arrow_is_not_speakers(self):
         self.assertEqual(exchange.parse_answer("1|Два > один, ясно?")[0]["1"], ("Два > один, ясно?", False, ""))
+
+    def test_notes_and_unsure_codes(self):
+        text = "@|26-48|Д and Гл at home. 32=Гл (night shift)\n31|Д>Гл|Знову на дивані спала?\n33|Гл?>Д|І пральна теж.\n34|ч1>Д|Так.\n"
+        answer, ignored = exchange.parse_answer(text)
+        self.assertEqual(ignored, [])
+        self.assertEqual(answer["33"], ("І пральна теж.", True, "Гл?>Д"))
+        self.assertEqual(answer["34"], ("Так.", False, "ч1>Д"))
+        self.assertEqual(exchange.parse_notes(text), [("26", "48", "Д and Гл at home. 32=Гл (night shift)")])
 
     def test_question_mark_in_text_is_not_a_flag(self):
         self.assertEqual(exchange.parse_answer("5|Де ти?")[0], {"5": ("Де ти?", False, "")})

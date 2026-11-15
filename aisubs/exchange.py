@@ -8,7 +8,7 @@ from pathlib import Path
 from . import limits
 from .prepare import Item
 
-PROMPT_VERSION = 4
+PROMPT_VERSION = 5
 PROMPTS = Path(__file__).parent / "prompts"
 CONTEXT_BEFORE = 5
 CONTEXT_AFTER = 3
@@ -18,7 +18,7 @@ TIGHT_RATIO = 0.85  # mark a line with its budget when the English uses more tha
 _ANSWER_RE = re.compile(r"^\s*(\|)?\s*\**(\d+[a-z]?)\**\s*(\?)?\s*\|\s?(.*?)\s*$")
 _TABLE_RULE_RE = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
 _ECHOED_BUDGET_RE = re.compile(r"^≤\d+\|\s?")
-# Who speaks to whom: "Д>Гл|text", "?>М|text"; models also write a bare "-|text" for narration
+# Who speaks to whom: "Д>Гл|text", "Гл?>Д|text" (unsure), "ч1>Д|text"; models also write a bare "-|text" for narration
 _SPEAKERS_RE = re.compile(r"^(?:([^\s|>]{1,4})\s*>\s*([^\s|>]{1,4})|([-*?]))\s*\|\s?")
 
 
@@ -52,12 +52,17 @@ def build_request(
     *,
     brief: bool = False,
     glossary_block: str = "",
+    scene_starts: frozenset[int] = frozenset(),
+    speaker_codes: dict[str, str] | None = None,
 ) -> str:
     """Request text for chunk `k` (0-based), asking only for keys not in done[k].
 
     `brief` is for an agent that keeps the conversation: no instructions and
     no previous lines, which it has already seen. The glossary block goes
-    with the instructions.
+    with the instructions. A `=` line marks a pause that usually starts a
+    new scene (`scene_starts` are item indices). A known SDH speaker is
+    given as `S=code`, with the code from `speaker_codes` (name -> code)
+    or the name itself.
     """
     out = [] if brief else [instructions(title), ""]
     if glossary_block and not brief:
@@ -72,13 +77,23 @@ def build_request(
             out.append("")
 
     have = done.get(k, {})
+    codes = speaker_codes or {}
     out.append(f"TRANSLATE (part {k + 1} of {len(chunks)}):")
+    last = None
     for key, i, p in chunk_keys(items, chunks[k]):
         if key in have:
             continue
-        text = items[i].parts[p].text
+        if last is not None and i != last and any(j in scene_starts for j in range(last + 1, i + 1)):
+            out.append("=")
+        last = i
+        part = items[i].parts[p]
+        fields = [key]
+        if part.speaker:
+            fields.append("S=" + codes.get(part.speaker.lower(), part.speaker))
         budget = limits.budgets(items[i])[p]
-        out.append(f"{key}|≤{budget}|{text}" if limits.is_tight(text, budget, TIGHT_RATIO) else f"{key}|{text}")
+        if limits.is_tight(part.text, budget, TIGHT_RATIO):
+            fields.append(f"≤{budget}")
+        out.append("|".join(fields + [part.text]))
 
     if k + 1 < len(chunks):
         following = [items[i].parts[p].text for _, i, p in chunk_keys(items, chunks[k + 1])][:CONTEXT_AFTER]
@@ -101,7 +116,7 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool, str]], list[str]
             continue
         m = _ANSWER_RE.match(line)
         if not m:
-            if not line.strip().startswith("+|"):  # glossary additions are read separately
+            if not line.strip().startswith(("+|", "@|")):  # glossary additions and scene notes are read separately
                 ignored.append(line.strip())
             continue
         table, key, flag, body = m.groups()
@@ -112,6 +127,15 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool, str]], list[str]
         if m := _SPEAKERS_RE.match(body):
             speakers = m.group(3) or f"{m.group(1)}>{m.group(2)}"
             body = body[m.end():]
+            # `?` after a code is a doubt; an unnamed person is ч/ж/x and is not flagged
             flag = flag or "?" in speakers
         result[key] = (body, bool(flag), speakers)
     return result, ignored
+
+
+_NOTE_RE = re.compile(r"^\s*@\|\s*(\d+[a-z]?)\s*[-–]\s*(\d+[a-z]?)\s*\|\s*(.+?)\s*$")
+
+
+def parse_notes(text: str) -> list[tuple[str, str, str]]:
+    """Scene notes `@|first-last|who is there, clues` as (first, last, note)."""
+    return [m.groups() for line in text.splitlines() if (m := _NOTE_RE.match(line))]

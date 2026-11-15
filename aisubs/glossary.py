@@ -116,6 +116,16 @@ def render(g: Glossary) -> str:
     return "\n".join(out)
 
 
+def speaker_codes(g: Glossary) -> dict[str, str]:
+    """SDH speaker name (lowercase) -> cast code, by full English name or its first word."""
+    out = {}
+    for code, en, *_ in g.cast:
+        name = en.strip(" ?").lower()
+        out.setdefault(name, code)
+        out.setdefault(name.split()[0] if name else name, code)
+    return out
+
+
 def build_request(title: str, found: list[dict], sample: list[str]) -> str:
     out = [(PROMPTS / "glossary.md").read_text(encoding="utf-8").replace("{title}", title).strip(), "", "CANDIDATES (name ×count, how often used to address someone; examples):"]
     for c in found:

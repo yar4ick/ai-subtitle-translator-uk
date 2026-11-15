@@ -44,10 +44,15 @@ def genders(g: Glossary) -> dict[str, str]:
     return out
 
 
+def base_code(code: str) -> str:
+    """'Гл?' -> 'Гл', 'ч1' -> 'ч', 'Д!' -> 'Д'."""
+    return code.strip().rstrip("?!").rstrip("0123456789")
+
+
 def gender_conflicts(text: str, speakers: str, cast: dict[str, str]) -> list[str]:
     """Problems like "я забув: S is ж" for one line; `speakers` is "S>A"."""
     s, _, a = speakers.partition(">")
-    want = {"я": cast.get(s.strip(), ""), "ти": cast.get(a.strip(), "")}
+    want = {"я": cast.get(base_code(s), ""), "ти": cast.get(base_code(a), "")}
     problems = []
     for sentence in _SENTENCE_RE.findall(text):
         words = [w.lower() for w in _WORD_RE.findall(sentence)]

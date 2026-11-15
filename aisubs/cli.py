@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, assemble, checks, exchange, glossary, srt
+from . import __version__, assemble, checks, exchange, glossary, prepare, srt
 from .project import Project, ProjectError
 
 
@@ -35,9 +35,11 @@ def cmd_prepare(args) -> int:
 
 def _request(project: Project, k: int, brief: bool) -> str:
     g = project.glossary()
+    scenes = prepare.make_scenes(project.items, project.meta["scene_gap"])
     return exchange.build_request(
         project.items, project.chunks, k, project.done(), project.meta["title"],
         brief=brief, glossary_block="" if g.is_empty() else glossary.render(g),
+        scene_starts=frozenset(a for a, _ in scenes[1:]), speaker_codes=glossary.speaker_codes(g),
     )
 
 
@@ -108,7 +110,7 @@ def cmd_import(args) -> int:
     else:
         text = Path(args.answer).read_text(encoding="utf-8-sig")
     answer, ignored = exchange.parse_answer(text)
-    report = project.save(k, answer)
+    report = project.save(k, answer, exchange.parse_notes(text))
     print(f"part {k + 1}/{len(project.chunks)}: accepted {len(report['accepted'])} lines")
     cast = checks.genders(project.glossary())
     conflicts = [
