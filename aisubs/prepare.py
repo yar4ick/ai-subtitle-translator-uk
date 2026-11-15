@@ -148,12 +148,8 @@ def make_items(cues: list[srt.Cue], keep_sdh: bool = False) -> tuple[list[Item],
     return kept, len(items) - len(kept)
 
 
-def make_chunks(items: list[Item], max_size: int = 200, scene_gap: int = 3000) -> list[tuple[int, int]]:
-    """Group items into chunks of whole scenes. Return [(first, last_exclusive)].
-
-    A scene ends where the pause between items is longer than `scene_gap` ms.
-    A scene longer than `max_size` is split at its longest pause.
-    """
+def make_scenes(items: list[Item], scene_gap: int = 3000) -> list[tuple[int, int]]:
+    """Split items where the pause between them is longer than `scene_gap` ms."""
     if not items:
         return []
     scenes = []
@@ -163,6 +159,17 @@ def make_chunks(items: list[Item], max_size: int = 200, scene_gap: int = 3000) -
             scenes.append((begin, k))
             begin = k
     scenes.append((begin, len(items)))
+    return scenes
+
+
+def make_chunks(items: list[Item], max_size: int = 200, scene_gap: int = 3000) -> list[tuple[int, int]]:
+    """Group items into chunks of whole scenes. Return [(first, last_exclusive)].
+
+    A scene longer than `max_size` is split at its longest pause.
+    """
+    if not items:
+        return []
+    scenes = make_scenes(items, scene_gap)
 
     def split(a: int, b: int) -> list[tuple[int, int]]:
         if b - a <= max_size:

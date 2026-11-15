@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from . import exchange, prepare, srt
+from . import candidates, exchange, prepare, srt
 
 FORMAT_VERSION = 1
 
@@ -73,6 +73,10 @@ class Project:
         }
         self.items, self.chunks = items, chunks
         _write_json(self.dir / "cues.json", [prepare.item_to_dict(i) for i in items])
+        _write_json(self.dir / "candidates.json", {
+            "candidates": [candidates.to_dict(c) for c in candidates.find(items)],
+            "sample": candidates.sample(items, scene_gap),
+        })
         _write_json(self.dir / "meta.json", self.meta)
         return parsed
 
