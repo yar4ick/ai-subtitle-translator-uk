@@ -98,6 +98,15 @@ class FetchTest(unittest.TestCase):
             self.assertEqual(wiki.find_article("Stranger Things S01E01 (2016)"), "Stranger Things")
         self.assertEqual(seen, ["Stranger Things 2016 TV series"])
 
+    def test_prefers_the_closest_title(self):
+        hits = [{"title": "Cyberpunk: Edgerunners 2"}, {"title": "Cyberpunk 2077"}, {"title": "Cyberpunk: Edgerunners"}]
+        with mock.patch.object(wiki, "_api", lambda host, **p: {"query": {"search": hits}}):
+            self.assertEqual(wiki.find_article("Cyberpunk Edgerunners S01E01"), "Cyberpunk: Edgerunners")
+        hits = [{"title": "Blade Runner 2049"}, {"title": "Blade Runner"}]
+        with mock.patch.object(wiki, "_api", lambda host, **p: {"query": {"search": hits}}):
+            self.assertEqual(wiki.find_article("Blade Runner 2049 (2017)"), "Blade Runner 2049")
+            self.assertEqual(wiki.find_article("Blade Runner (1982)"), "Blade Runner")
+
     def test_no_match(self):
         with mock.patch.object(wiki, "_api", lambda host, **p: {"query": {"search": [{"title": "Something Else"}]}}):
             with self.assertRaises(wiki.WikiError):
@@ -114,6 +123,24 @@ class CrossCheckTest(unittest.TestCase):
             "Mathilda occurs 12 times but is not in CAST or TERMS",
         ])
 
+
+
+class GenderCheckTest(unittest.TestCase):
+    LINES = [
+        "Where's Gloria? She was here.", "Gloria said she'd call.", "Did you see her?",
+        "Mrs. Martinez is late.", "Gloria, wait!", "David, she's gone.",
+        "- Who is David?\n- Her new boyfriend.",
+    ]
+
+    def test_contradiction(self):
+        g, _ = glossary.parse("C|Г|Gloria Martinez|Глорія|ч|мати|тепла\nC|Д|David Martinez|Девід|ч|син|зухвалий\n")
+        self.assertEqual(glossary.gender_warnings(g, self.LINES), [
+            "Г Gloria Martinez: CAST says ч, but the subtitles say she/her about them (4 vs 0); check the gender"])
+
+    def test_no_warning_when_right_or_spoken_to(self):
+        g, _ = glossary.parse("C|Г|Gloria Martinez|Глорія|ж|мати|тепла\nC|Д|David Martinez|Девід|ч|син|зухвалий\n")
+        self.assertEqual(glossary.gender_warnings(g, self.LINES), [])  # "David, she's…" and "- Her…" are not about David
+        self.assertEqual(glossary.gender_evidence(self.LINES, "David"), (0, 0))
 
 
 class CommandTest(unittest.TestCase):

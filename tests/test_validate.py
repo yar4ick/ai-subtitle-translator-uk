@@ -129,7 +129,7 @@ class ReviewTest(unittest.TestCase):
         self.film = self.tmp / "Lighthouse.2021.en.srt"
         shutil.copy(FIXTURES / "basic.srt", self.film)
         run("prepare", str(self.film))
-        run("glossary", str(self.film), "-", stdin="C|М|Marta|Марта|ж|доглядачка|сувора\n")
+        _, self.glossary_out = run("glossary", str(self.film), "-", stdin="PLOT|Марта сама на маяку.\nC|М|Marta|Марта|ж|доглядачка|сувора\n")
         _, request = run("next", str(self.film))
         answer = answer_all(request).replace("2a|Л>Б|", "2a|М?>Б|")
         run("import", str(self.film), stdin=answer + "@|1-4|Marta alone. 4=М\n")
@@ -137,6 +137,11 @@ class ReviewTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmp)
+
+    def test_glossary_names_without_spoilers(self):
+        self.assertIn("Names: Марта (ж)", self.glossary_out)
+        self.assertNotIn("доглядачка", self.glossary_out)
+        self.assertNotIn("маяку", self.glossary_out)
 
     def test_write_edit_apply(self):
         code, out = run("review", str(self.film))

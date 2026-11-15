@@ -74,10 +74,14 @@ def cmd_glossary(args) -> int:
     print(f"Glossary saved: {len(g.cast)} characters, {len(g.pairs)} pairs, {len(g.terms)} terms" + (f", {unsure} unsure (marked ?)" if unsure else ""))
     if ignored:
         print(f"ignored {len(ignored)} lines that are not glossary lines")
+    if g.cast:
+        # Spoiler-free: names and gender only, no plot or roles
+        print("Names: " + ", ".join(f"{row[2]} ({row[3]})" for row in g.cast))
     data = project.candidates()
-    for warning in glossary.cross_check(g, data["candidates"], project.source_names()):
+    lines = [part.text for item in project.items for part in item.parts]
+    for warning in glossary.cross_check(g, data["candidates"], project.source_names(), lines=lines):
         print(f"warning: {warning}")
-    print(f"Check or edit {project.glossary_path}, then: aisubs next {args.film}")
+    print(f"Next: aisubs next {args.film}")
     return 0
 
 
