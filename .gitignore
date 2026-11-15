@@ -19,3 +19,7 @@ eval/
 
 # Working notes and reviews, local only
 docs/
+
+# Screenshots and local notes in the root
+/*.png
+/.claude/
