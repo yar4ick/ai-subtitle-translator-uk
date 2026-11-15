@@ -5,16 +5,19 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from . import limits
 from .prepare import Item
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 PROMPTS = Path(__file__).parent / "prompts"
 CONTEXT_BEFORE = 5
 CONTEXT_AFTER = 3
+TIGHT_RATIO = 0.85  # mark a line with its budget when the English uses more than this share of it
 
 # "12|text", "12a|text", "12?|text", "| 12 | text |", "**12**|text"
 _ANSWER_RE = re.compile(r"^\s*(\|)?\s*\**(\d+[a-z]?)\**\s*(\?)?\s*\|\s?(.*?)\s*$")
 _TABLE_RULE_RE = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
+_ECHOED_BUDGET_RE = re.compile(r"^≤\d+\|\s?")
 
 
 def chunk_keys(items: list[Item], chunk: tuple[int, int]) -> list[tuple[str, int, int]]:
@@ -47,11 +50,15 @@ def build_request(
     *,
     brief: bool = False,
 ) -> str:
-    """Request text for chunk `k` (0-based), asking only for keys not in done[k]."""
+    """Request text for chunk `k` (0-based), asking only for keys not in done[k].
+
+    `brief` is for an agent that keeps the conversation: no instructions and
+    no previous lines, which it has already seen.
+    """
     out = [] if brief else [instructions(title), ""]
 
     prev = done.get(k - 1, {})
-    if k > 0 and prev:
+    if k > 0 and prev and not brief:
         pairs = [(items[i].parts[p].text, prev[key]) for key, i, p in chunk_keys(items, chunks[k - 1]) if key in prev]
         if pairs:
             out.append("CONTEXT (previous lines, already translated):")
@@ -59,9 +66,13 @@ def build_request(
             out.append("")
 
     have = done.get(k, {})
-    todo = [(key, items[i].parts[p].text) for key, i, p in chunk_keys(items, chunks[k]) if key not in have]
     out.append(f"TRANSLATE (part {k + 1} of {len(chunks)}):")
-    out += [f"{key}|{text}" for key, text in todo]
+    for key, i, p in chunk_keys(items, chunks[k]):
+        if key in have:
+            continue
+        text = items[i].parts[p].text
+        budget = limits.budgets(items[i])[p]
+        out.append(f"{key}|≤{budget}|{text}" if limits.is_tight(text, budget, TIGHT_RATIO) else f"{key}|{text}")
 
     if k + 1 < len(chunks):
         following = [items[i].parts[p].text for _, i, p in chunk_keys(items, chunks[k + 1])][:CONTEXT_AFTER]
@@ -88,5 +99,6 @@ def parse_answer(text: str) -> tuple[dict[str, tuple[str, bool]], list[str]]:
         table, key, flag, body = m.groups()
         if table and body.endswith("|"):
             body = body[:-1].rstrip()
+        body = _ECHOED_BUDGET_RE.sub("", body)
         result[key] = (body, bool(flag))
     return result, ignored

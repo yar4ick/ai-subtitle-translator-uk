@@ -90,10 +90,20 @@ def cmd_import(args) -> int:
         print("empty translations (not accepted): " + ", ".join(report["empty"]))
     if report["missing"]:
         print(f"missing {len(report['missing'])} lines: " + ", ".join(report["missing"][:30]))
-        print(f"Get them with: aisubs next {args.film}")
+        if args.next:
+            print()
+            sys.stdout.write(exchange.build_request(project.items, project.chunks, k, project.done(), project.meta["title"], brief=True))
+        else:
+            print(f"Get them with: aisubs next {args.film}")
         return 2
     pending = project.pending_chunk()
-    print(f"Next: aisubs next {args.film}" if pending is not None else f"All parts translated. Next: aisubs assemble {args.film}")
+    if pending is None:
+        print(f"All parts translated. Next: aisubs assemble {args.film}")
+    elif args.next:
+        print()
+        sys.stdout.write(exchange.build_request(project.items, project.chunks, pending, project.done(), project.meta["title"], brief=True))
+    else:
+        print(f"Next: aisubs next {args.film}")
     return 0
 
 
@@ -148,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("film")
     p.add_argument("answer", nargs="?", default="-", help="file with the answer, or - for stdin (default)")
     p.add_argument("--part", type=int, help="part number (default: the first unfinished)")
+    p.add_argument("--next", action="store_true", help="then print the next request (brief), saving the agent a step")
     p.set_defaults(func=cmd_import)
 
     p = sub.add_parser("assemble", help="write the translated .uk.srt")

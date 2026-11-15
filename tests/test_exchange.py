@@ -39,11 +39,20 @@ class RequestTest(unittest.TestCase):
 
     def test_context_and_missing_only(self):
         done = {0: {"1": "Один", "2": "Два"}, 1: {"1": "Три"}}
-        text = exchange.build_request(self.items, self.chunks, 1, done, "F", brief=True)
-        self.assertTrue(text.startswith("CONTEXT (previous lines, already translated):\nOne => Один\nTwo => Два\n"))
+        text = exchange.build_request(self.items, self.chunks, 1, done, "F")
+        self.assertIn("CONTEXT (previous lines, already translated):\nOne => Один\nTwo => Два\n", text)
         self.assertIn("TRANSLATE (part 2 of 3):\n2|Four\n", text)
         self.assertNotIn("1|Three", text)
-        self.assertNotIn("Film:", text)
+
+    def test_brief_has_no_instructions_or_previous_lines(self):
+        done = {0: {"1": "Один", "2": "Два"}}
+        text = exchange.build_request(self.items, self.chunks, 1, done, "F", brief=True)
+        self.assertTrue(text.startswith("TRANSLATE (part 2 of 3):\n1|Three\n"))
+
+    def test_tight_lines_get_a_budget(self):
+        its = [Item(0, 1000, [Part("You have got to get out of there right now!")]), Item(2000, 5000, [Part("Okay.")])]
+        text = exchange.build_request(its, [(0, 2)], 0, {}, "F", brief=True)
+        self.assertIn("1|≤17|You have got to get out of there right now!\n2|Okay.\n", text)
 
 
 class ParseAnswerTest(unittest.TestCase):
@@ -64,6 +73,9 @@ class ParseAnswerTest(unittest.TestCase):
     def test_pipe_inside_text_and_bold_id(self):
         answer, _ = exchange.parse_answer("**3**|Так | ні\n4 ? | Хто?")
         self.assertEqual(answer, {"3": ("Так | ні", False), "4": ("Хто?", True)})
+
+    def test_echoed_budget_is_removed(self):
+        self.assertEqual(exchange.parse_answer("1|≤17|Тікай звідти!")[0], {"1": ("Тікай звідти!", False)})
 
     def test_question_mark_in_text_is_not_a_flag(self):
         self.assertEqual(exchange.parse_answer("5|Де ти?")[0], {"5": ("Де ти?", False)})
