@@ -17,6 +17,10 @@ def items(*texts) -> list[Item]:
 
 
 class KeysTest(unittest.TestCase):
+    def test_budget_echoed_after_speakers(self):
+        answer, _ = exchange.parse_answer("3|Ш>С|≤58|Дурна.\n")
+        self.assertEqual(answer["3"], ("Дурна.", False, "Ш>С"))
+
     def test_numbering_skips_untranslatable_and_splits_dialogue(self):
         its = items("A", None, ["B", "C"], "D")
         self.assertEqual(exchange.chunk_keys(its, (0, 4)), [("1", 0, 0), ("2a", 2, 0), ("2b", 2, 1), ("3", 3, 0)])

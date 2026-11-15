@@ -18,7 +18,7 @@ CLI-команда: `aisubs`.
 
 | Користувач | Як працює |
 |---|---|
-| Claude Pro/Max | Плагін Claude Code: `/plugin marketplace add yar4ick/ai-subtitle-translator-uk`, `/plugin install <plugin>@<marketplace>`, далі `/<plugin>:translate-subs film.srt`. Скіл викликає `aisubs` з папки плагіна (тому лише stdlib — нічого не треба встановлювати) і дотримується `aisubs guide` |
+| Claude Pro/Max | Плагін Claude Code: `/plugin marketplace add yar4ick/ai-subtitle-translator-uk`, `/plugin install <plugin>@<marketplace>`, далі `/aisubs:translate film.srt`. Скіл викликає `aisubs` з папки плагіна (тому лише stdlib — нічого не треба встановлювати) і дотримується `aisubs guide` |
 | ChatGPT (Codex CLI), Gemini CLI, інші агенти | `pipx install git+https://github.com/yar4ick/ai-subtitle-translator-uk`, далі фраза «виконай `aisubs guide film.srt`…» |
 | Тільки веб-чат | `aisubs next` друкує готовий до вставки промпт, `aisubs import` приймає вставлену відповідь |
 | API-ключ (пізніше) | `--backend anthropic/openai`, необов'язково |
@@ -37,12 +37,12 @@ ai-subtitle-translator-uk/
 │   ├── assemble.py       # збирання .uk.srt, перенесення рядків
 │   ├── project.py        # робоча папка film.aisubs/
 │   ├── guide.py          # інструкції для агента
-│   ├── cli.py            # aisubs prepare|guide|status|next|import|validate|assemble
+│   ├── cli.py            # aisubs guide|prepare|glossary|status|next|import|validate|fix|review|assemble
 │   └── prompts/          # ЄДИНЕ джерело інструкцій для ШІ (у пакеті, щоб їх встановлював pip)
 │       ├── glossary.md
 │       └── translate.md
 ├── .claude-plugin/       # plugin.json + marketplace.json
-├── skills/translate-subs/SKILL.md
+├── skills/translate/SKILL.md
 ├── tests/fixtures/       # відкриті субтитри (Blender: Sintel, Tears of Steel — після перевірки ліцензії) і власні зразки
 ├── .github/workflows/ci.yml
 └── README.md, LICENSE, .gitignore, pyproject.toml
@@ -252,6 +252,10 @@ ai-subtitle-translator-uk/
    - Після збереження глосарію код попереджає: ім'я з CAST не трапляється в субтитрах; часте ім'я (≥ 5 разів) не потрапило ні в CAST, ні в TERMS (звертання на кшталт Mom, sir не враховуються).
    - Промпт глосарію: правило про прізвиська й короткі імена вже відомих персонажів (Stan = Norman Stansfield); один веб-пошук складу, якщо модель не знає фільму й має пошук.
 6. **`guide`** і **адаптер Claude Code**: інструкції для агента з CLI, скіл, `plugin.json`, `marketplace.json`.
+   - `aisubs guide [film.srt] [--command …]`: інструкція з `aisubs/prompts/guide.md` з підставленими шляхами й тим способом запуску, яким викликано CLI (`aisubs`, `python -m aisubs` або `python шлях/до/aisubs` — пакет запускається як тека без встановлення). Тест звіряє кожну команду й опцію з інструкції з CLI.
+   - Плагін Claude Code: `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (плагін у корені репозиторію), скіл `skills/translate/SKILL.md` → `/aisubs:translate film.srt [побажання]`. Скіл дозволяє наперед `python3 ${CLAUDE_PLUGIN_ROOT}/aisubs …`, тож користувача не питають про кожен виклик. `claude plugin validate .` — без помилок.
+   - Встановлення (коли репозиторій стане публічним): `/plugin marketplace add yar4ick/ai-subtitle-translator-uk`, далі `/plugin install aisubs@aisubs`.
+   - Проба: `claude -p --plugin-dir . --model sonnet "/aisubs:translate sintel_en.srt …"` пройшов увесь цикл сам (підготовка, глосарій, переклад, перевірки, fix, review, assemble). Знайдена вада — модель повторювала `≤N` після `S>A` — виправлена в розборі відповіді.
 7. **Перевірка з іншими агентами**: Codex CLI, Gemini CLI.
 8. **Документація** (README українською та англійською з короткою інструкцією для кожного інструмента), **реліз v0.1.0**; репозиторій стає публічним.
 

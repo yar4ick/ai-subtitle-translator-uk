@@ -1,4 +1,4 @@
-"""Command line: aisubs prepare | glossary | status | next | import | validate | fix | review | assemble."""
+"""Command line: aisubs guide | prepare | glossary | status | next | import | validate | fix | review | assemble."""
 
 from __future__ import annotations
 
@@ -7,8 +7,13 @@ import re
 import sys
 from pathlib import Path
 
-from . import __version__, assemble, exchange, glossary, prepare, review, srt, validate
+from . import __version__, assemble, exchange, glossary, guide, prepare, review, srt, validate
 from .project import Project, ProjectError
+
+
+def cmd_guide(args) -> int:
+    sys.stdout.write(guide.text(args.film or "", args.command))
+    return 0
 
 
 def cmd_prepare(args) -> int:
@@ -315,6 +320,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="aisubs", description="AI translation of SRT subtitles into Ukrainian.")
     parser.add_argument("--version", action="version", version=f"aisubs {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("guide", help="print instructions for an AI agent that runs the whole translation")
+    p.add_argument("film", nargs="?", help="subtitle file, e.g. film.srt")
+    p.add_argument("--command", help="how the agent should run aisubs (default: as it was run now)")
+    p.set_defaults(func=cmd_guide)
 
     p = sub.add_parser("prepare", help="read the SRT and split it into parts for translation")
     p.add_argument("film", help="subtitle file, e.g. film.srt")

@@ -1,0 +1,12 @@
+{
+  "name": "aisubs",
+  "description": "AI subtitle translator into Ukrainian",
+  "owner": { "name": "yar4ick" },
+  "plugins": [
+    {
+      "name": "aisubs",
+      "source": "./",
+      "description": "Translate SRT subtitles from English into Ukrainian with Claude: /aisubs:translate film.srt"
+    }
+  ]
+}
