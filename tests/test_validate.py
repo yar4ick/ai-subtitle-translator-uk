@@ -120,6 +120,22 @@ class FixFlowTest(unittest.TestCase):
         self.assertEqual(project.retries()[0], {"2b": 1})
         self.assertEqual(project.done()[0]["1"], "Що?")
 
+    def test_one_fix_request_for_all_parts(self):
+        film = self.tmp / "sintel.srt"
+        shutil.copy(FIXTURES / "sintel_en.srt", film)
+        run("prepare", str(film), "--chunk-size", "10")
+        for _ in range(3):
+            _, request = run("next", str(film))
+            run("import", str(film), stdin=answer_all(request, lambda key, src: "Wait." if key in ("1", "21") else "Що?"))
+        code, request = run("fix", str(film), "--brief")
+        self.assertIn("FIX (parts 1, 3 of 3)", request)
+        self.assertIn("\n1|", request)
+        self.assertIn("\n21|", request)
+        code, out = run("import", str(film), "--fix", "--next", stdin="1|Л>Б|Чекай.\n21|Л>Б|Стривай.\n")
+        self.assertIn("part 1/3: accepted 1 lines", out)
+        self.assertIn("part 3/3: accepted 1 lines", out)
+        self.assertIn("Nothing to fix.", out)
+
     def test_fix_and_next(self):
         _, request = run("next", str(self.film))
         run("import", str(self.film), stdin=answer_all(request, lambda key, src: "Wait." if key == "1" else "Що?"))
@@ -148,7 +164,7 @@ class ReviewTest(unittest.TestCase):
         run("prepare", str(self.film))
         _, self.glossary_out = run("glossary", str(self.film), "-", stdin="PLOT|Марта сама на маяку.\nC|М|Marta|Марта|ж|доглядачка|сувора\n")
         _, request = run("next", str(self.film))
-        answer = answer_all(request).replace("2a|Л>Б|", "2a|М?>Б|")
+        answer = answer_all(request).replace("2a|Л>Б|Що?", "2a|М?>Б|Ти прийшов?")
         run("import", str(self.film), stdin=answer + "@|1-4|Marta alone. 4=М\n")
         self.path = self.tmp / "Lighthouse.2021.en.aisubs" / "review.txt"
 
@@ -160,6 +176,13 @@ class ReviewTest(unittest.TestCase):
         self.assertNotIn("доглядачка", self.glossary_out)
         self.assertNotIn("маяку", self.glossary_out)
 
+    def test_a_doubt_without_gender_in_the_line_is_not_for_review(self):
+        film = self.film
+        _, request = run("next", str(film), "--part", "1")
+        code, out = run("import", str(film), "--part", "1", stdin="2a|М?>Б|Що?\n")
+        code, out = run("review", str(film))
+        self.assertIn("Nothing to review", out)
+
     def test_write_edit_apply(self):
         code, out = run("review", str(self.film))
         self.assertEqual(code, 0, out)
@@ -167,9 +190,9 @@ class ReviewTest(unittest.TestCase):
         text = self.path.read_text(encoding="utf-8")
         self.assertIn("# Codes: М Марта", text)
         self.assertIn("   AI note 1–4: Marta alone. 4=М", text)
-        self.assertIn("   Did you see that?\n!  the model was unsure who speaks (?)\n1:2a|М?>Б|Що?\n", text)
+        self.assertIn("   Did you see that?\n!  the model was unsure who speaks (?)\n1:2a|М?>Б|Ти прийшов?\n", text)
 
-        self.path.write_text(text.replace("1:2a|М?>Б|Що?", "1:2a|М>Б|Я забув?"), encoding="utf-8")
+        self.path.write_text(text.replace("1:2a|М?>Б|Ти прийшов?", "1:2a|М>Б|Я забув?"), encoding="utf-8")
         code, out = run("review", str(self.film))
         self.assertEqual(code, 1)
         self.assertIn("not saved yet", out)

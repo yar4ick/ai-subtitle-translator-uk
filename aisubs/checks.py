@@ -37,6 +37,17 @@ def past_gender(word: str) -> str:
     return ""
 
 
+# Words that show the speaker's or addressee's gender without a past-tense verb
+_GENDERED = set("радий рада певен певна певний згоден згодна сам сама винен винна готовий готова живий жива "
+                "самотній самотня втомився втомилася голодний голодна потрібен потрібна вагітна".split())
+
+
+def shows_gender(text: str) -> bool:
+    """True if the Ukrainian line has a word whose form depends on gender: «забув», «рада».
+    A doubt about who speaks matters for the translation only in such lines."""
+    return any(past_gender(w) or w in _GENDERED for w in (x.lower() for x in _WORD_RE.findall(text)))
+
+
 def genders(g: Glossary) -> dict[str, str]:
     """Cast code -> 'ч' / 'ж' (the bare letters ч, ж work as codes too)."""
     out = dict(_GENDERS)
