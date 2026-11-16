@@ -25,6 +25,9 @@ class WrapTest(unittest.TestCase):
 class TypographyTest(unittest.TestCase):
     def test_ellipsis_and_quotes(self):
         self.assertEqual(assemble.typography('Він сказав "так"...'), "Він сказав «так»…")
+        self.assertEqual(assemble.typography("Якщо це через учора—"), "Якщо це через учора…")
+        self.assertEqual(assemble.typography("<i>Зміна пішла б на—</i>"), "<i>Зміна пішла б на…</i>")
+        self.assertEqual(assemble.typography("Це — правда."), "Це — правда.")
 
 
 class CueTextTest(unittest.TestCase):

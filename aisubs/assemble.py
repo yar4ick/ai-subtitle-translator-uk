@@ -23,6 +23,8 @@ def visible_len(text: str) -> int:
 
 def typography(text: str) -> str:
     text = text.replace("...", "…")
+    # A line cut off with a dash right after a word ("Якщо через учора—") ends with …
+    text = re.sub(r"(\w)\s?[—–-](</i>)?$", r"\1…\2", text)
     # Straight double quotes in pairs -> «»
     return re.sub(r'"([^"]*)"', r"«\1»", text)
 
