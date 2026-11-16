@@ -32,6 +32,11 @@ class CheckerTest(unittest.TestCase):
     def test_english_name_left(self):
         self.assertEqual(self.problems("Ask Leon.", "Спитай Leon."), ["name left in English: Leon (glossary: Леон)"])
 
+    def test_latin_inside_a_ukrainian_line(self):
+        self.assertEqual(self.problems("All AVs vacate.", "Усім AV звільнити."), ["Latin letters left: AV (transliterate or translate)"])
+        self.assertEqual(self.problems("The Strongarms 400.", "Strongarms 400 справді."), ["Latin letters left: Strongarms (transliterate or translate)"])
+        self.assertEqual(self.problems("Louis XIV.", "Людовік XIV."), [])  # Roman numerals
+
     def test_russian_letters(self):
         self.assertEqual(self.problems("Yes.", "Ещё бы."), ["Russian letters: ыё"])
 
@@ -48,6 +53,10 @@ class CheckerTest(unittest.TestCase):
 
     def test_gender(self):
         self.assertEqual(self.problems("I forgot.", "Я забув.", "С>Л"), ["gender: «я забув», but S is ж"])
+
+    def test_a_guessed_gender_is_not_checked(self):
+        c = validate.Checker(glossary.parse("C|Х|Alex|Алекс|ж?|?|?\nC|Л|Leon|Леон|ч|кілер|тихий\n")[0])
+        self.assertEqual(c.line("I forgot.", "Я забув.", "Х>Л"), [])
 
     def test_plural_nouns_in_iv_are_not_verbs(self):
         self.assertEqual(self.problems("I'll call the cops.", "Я покличу копів.", "С>Л"), [])

@@ -8,7 +8,7 @@ from pathlib import Path
 from . import limits
 from .prepare import Item
 
-PROMPT_VERSION = 5
+PROMPT_VERSION = 6
 PROMPTS = Path(__file__).parent / "prompts"
 CONTEXT_BEFORE = 5
 CONTEXT_AFTER = 3

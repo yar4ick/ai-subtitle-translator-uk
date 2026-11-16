@@ -28,6 +28,12 @@ class FindTest(unittest.TestCase):
         found = names(items("Well, I don't know.", "Look, it's late. Okay?", "It's Tonto, downstairs.", "Come on, okay?"))
         self.assertEqual(found, {"Tonto": (1, 0)})
 
+    def test_characters_naming_themselves(self):
+        found = {c.name: c.intro for c in candidates.find(items(
+            "<i>Katsuo here. Heard about your mom.</i>", "I'm Lucy.", "Sign here.", "From here on out, we run.",
+            "It's Gloria. Call me back."))}
+        self.assertEqual(found, {"Katsuo": 1, "Lucy": 1, "Gloria": 1})
+
     def test_lowercase_forms_of_address_need_two_uses(self):
         self.assertNotIn("kid", names(items("Easy, kid.")))
         self.assertEqual(names(items("Easy, kid.", "Run, kid!"))["kid"], (2, 2))

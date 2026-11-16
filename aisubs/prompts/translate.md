@@ -29,11 +29,14 @@ LENGTH
 - Never cut: who did what to whom, negation, numbers, a name on first mention, plot facts, the point of a joke.
 
 LANGUAGE
-- Living spoken Ukrainian in the register of the film and of each character. Render idioms, insults and exclamations by function, with what a Ukrainian would say there. No calques, no Russianisms, no surzhyk.
+- Living spoken Ukrainian in the register of the film and of each character. Render idioms, insults and exclamations by function, with what a Ukrainian would say there («No shit.» as agreement → «Ще б пак.», «Fuck that.» → «Та ну нафіг.», «Counting on you.» → «Не підведи.»). No calques, no Russianisms, no surzhyk.
 - Swearing: keep its strength with natural Ukrainian swearing; do not soften and do not add. Mild (damn, hell, crap): чорт, дідько, трясця. Strong (shit, fuck, bitch, ass): бля, бляха, курва, сука, нахуй, дупа — not «блін» or «чорт». An exclamation is rendered by an exclamation («Shit!» → «Бляха!» or «Бля!»), not by the dictionary word («Лайно!»).
-- GLOSSARY, when given, is binding: the gender of S and A from CAST, ти/ви from PAIRS.
-- Names and terms exactly as in CAST and TERMS; otherwise Ukrainian transliteration, consistent across the film. If you coin a rendering for a new recurring name or term, add a final line `+|english=українською`.
-- «» for quotes, … for ellipsis, — for a dash. Numbers one to ten in words, larger numbers in digits.
+- GLOSSARY, when given, is binding: the gender of S and A from CAST, ти/ви from PAIRS. A gender with `?` (`ж?`) is a guess: prefer wording that does not show it.
+- People outside PAIRS: choose ти or ви once per scene by their relation (officials, teachers, doctors and strangers to adults: ви) and keep it in every line of the scene.
+- When several lines speak of the same thing, keep one noun for it, so that gender and number stay the same.
+- Names and terms exactly as in CAST and TERMS; otherwise Ukrainian transliteration, consistent across the film. No Latin letters in a line: transliterate or translate brands, product names and abbreviations too (FBI → ФБР, iPhone → айфон) unless TERMS says otherwise. If you coin a rendering for a new recurring name or term, add a final line `+|english=українською`.
+- A recurring named character who is not in CAST ("Katsuo here."): give them a new code and add a final line `+|C|code|English name|Українське ім'я|ч/ж|role`.
+- «» for quotes, … for ellipsis, — for a dash. A line cut off mid-word or mid-sentence ends with …, not with a dash. Numbers one to ten in words, larger numbers in digits.
 - CONTEXT lines are for reference only; do not translate them.
 
 EXAMPLES (invented; М and О are cast codes)

@@ -35,7 +35,7 @@ class GenderTest(unittest.TestCase):
     def test_genders_from_glossary(self):
         from aisubs.glossary import Glossary
         g = Glossary(cast=[["Гл", "Gloria", "Глорія", "ж", "", ""], ["Ло", "Lonnie", "Лонні", "ч?", "", ""]])
-        self.assertEqual(checks.genders(g), {"ч": "ч", "ж": "ж", "Гл": "ж", "Ло": "ч"})
+        self.assertEqual(checks.genders(g), {"ч": "ч", "ж": "ж", "Гл": "ж"})  # "ч?" is a guess: not checked
 
 
 if __name__ == "__main__":

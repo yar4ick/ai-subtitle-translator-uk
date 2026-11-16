@@ -25,6 +25,12 @@ _SENTENCE_END_RE = re.compile(r"[.!?…]\s*$|^\s*$")
 # ", kid." / ", Mathilda?" at the end; "Gloria, " at the start
 _VOCATIVE_END_RE = re.compile(rf",\s+({_NAME}|[a-z]+)\s*[.?!…]+$")
 _VOCATIVE_START_RE = re.compile(rf"^({_NAME}),\s")
+# A character naming themselves at the start of a sentence: "Katsuo here.", "It's Gloria.", "I'm Lucy."
+_INTRO_RE = re.compile(rf"^(?:(?:It's|This is|I'm|I am|My name is|My name's|Call me|Name's|The name's)\s+({_NAME})\b|({_NAME}) here\b)")
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
+# "Sign here.", "From here on": words that come before "here" without being names
+_NOT_INTRO = set("Sign Come Stay Wait Over From Up Down Get Stop Look Right Out In Sit Stand Put Click Press Start "
+                 "Leave Go Live Work Park Turn Move Hold Lie Back Everyone Everybody Nobody Somebody Someone".split())
 
 # Capitalized mid-sentence for other reasons
 _NOT_NAMES = set(
@@ -53,6 +59,7 @@ class Candidate:
     count: int = 0
     vocative: int = 0  # times used to address someone
     speaker: int = 0  # times seen as an SDH speaker label
+    intro: int = 0  # times the character names themselves ("Katsuo here.")
     examples: list[str] = field(default_factory=list)
 
 
@@ -88,6 +95,8 @@ def find(items: list[Item]) -> list[Candidate]:
         c.count += 1
         if kind == "vocative":
             c.vocative += 1
+        if kind == "intro":
+            c.intro += 1
         if len(c.examples) < EXAMPLES and line not in c.examples:
             c.examples.append(line)
 
@@ -109,18 +118,28 @@ def find(items: list[Item]) -> list[Candidate]:
             vocatives.add(m.group(1))
         for v in vocatives:
             add(v, line, "vocative")
-        for name in _mid_sentence_names(line):
+        mid = _mid_sentence_names(line)
+        for sentence in _SENTENCE_SPLIT_RE.split(line.lstrip("-–— ")):
+            m = _INTRO_RE.match(sentence)
+            name = m and (m.group(1) or m.group(2))
+            if not name or name.split()[0] in _NOT_NAMES | _NOT_VOCATIVES | _NOT_INTRO:
+                continue
+            if name in vocatives or name in mid:  # counted below; only mark it
+                found.setdefault(name, Candidate(name)).intro += 1
+            else:
+                add(name, line, "intro")
+        for name in mid:
             if name not in vocatives:
                 add(name, line)
 
     def keep(c: Candidate) -> bool:
-        if c.speaker:
+        if c.speaker or c.intro:
             return True
         if c.name[0].islower():  # "kid", "choom": only repeated forms of address
             return c.vocative >= 2
         return c.name in mid_names or c.name in end_vocatives
 
-    return sorted((c for c in found.values() if keep(c)), key=lambda c: (-c.speaker, -c.count, c.name))
+    return sorted((c for c in found.values() if keep(c)), key=lambda c: (-c.speaker, -c.intro, -c.count, c.name))
 
 
 def sample(items: list[Item], scene_gap: int = 3000) -> list[str]:
