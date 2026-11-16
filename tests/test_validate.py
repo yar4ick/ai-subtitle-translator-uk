@@ -124,7 +124,9 @@ class FixFlowTest(unittest.TestCase):
         _, request = run("next", str(self.film))
         run("import", str(self.film), stdin=answer_all(request, lambda key, src: "Wait." if key == "1" else "Що?"))
         code, out = run("import", str(self.film), "--fix", "--next", stdin="1|Л>Б|Чекай.\n")
-        self.assertIn("Nothing to fix. Next: aisubs assemble", out)
+        self.assertIn("Nothing to fix.", out)
+        self.assertIn("Lighthouse.2021.uk.srt. Done.", out)  # --next finishes the job
+        self.assertTrue((self.tmp / "Lighthouse.2021.uk.srt").exists())
 
     def test_refusal(self):
         _, request = run("next", str(self.film))

@@ -48,6 +48,10 @@ def cmd_prepare(args) -> int:
     print(f"Parts: {len(project.chunks)}")
     if args.wikipedia is not None:
         print(project.fetch_wikipedia(args.wikipedia))
+    if args.glossary:
+        print()
+        sys.stdout.write(project.glossary_request())
+        return 0
     print(f"Next: aisubs glossary {args.film}  (or skip it: aisubs next {args.film})")
     return 0
 
@@ -93,8 +97,16 @@ def cmd_glossary(args) -> int:
         print("Unsure terms: " + ", ".join(unsure_terms))
     data = project.candidates()
     lines = [part.text for item in project.items for part in item.parts]
-    for warning in glossary.cross_check(g, data["candidates"], project.source_names(), lines=lines):
+    warnings = glossary.cross_check(g, data["candidates"], project.source_names(), lines=lines)
+    for warning in warnings:
         print(f"warning: {warning}")
+    if args.next and not warnings and (k := project.pending_chunk()) is not None:
+        print()
+        sys.stdout.write(_request(project, k, False))
+        return 0
+    if args.next and warnings:
+        print("Check the warnings: save a corrected glossary the same way, or go on with: aisubs next " + str(args.film))
+        return 0
     print(f"Next: aisubs next {args.film}")
     return 0
 
@@ -176,6 +188,9 @@ def _after_all_done(project: Project, args, brief_next: bool) -> int:
     print("\n".join(lines))
     k = _fix_part(project, problems)
     if k is None:
+        if brief_next:
+            print("Nothing to fix.")
+            return _finish(project, problems, args.film)
         nxt = "review" if problems else "assemble"
         print(f"Nothing to fix. Next: aisubs {nxt} {args.film}")
         return 0
@@ -185,6 +200,28 @@ def _after_all_done(project: Project, args, brief_next: bool) -> int:
     else:
         print(f"Next: aisubs fix {args.film}")
     return 0
+
+
+def _finish(project: Project, problems: list, film) -> int:
+    """The last steps without asking: the review file and the translated .srt."""
+    path = project.dir / "review.txt"
+    text, count = review.render(project, problems, str(film))
+    if count:
+        if path.exists() and review.apply(project, path.read_text(encoding="utf-8-sig"), dry_run=True)[0]:
+            print(f"{path} has edits that are not saved yet; it was left as it is (aisubs review {film} --apply)")
+        else:
+            path.write_text(text, encoding="utf-8")
+            print(f"Wrote {path}: {count} lines to look at (the user can fix them, then: aisubs review {film} --apply)")
+    out = project.output_path()
+    if not project.owns_output(out):
+        print(f"{out} already exists and was not written by aisubs: not overwritten. Write it with: aisubs assemble {film} -o OTHER.srt")
+        return 0
+    _write_output(project, out, partial=False, bom=False)
+    print(f"Wrote {out}. Done.")
+    return 0
+
+
+FULL_EVERY = 4  # parts 5, 9, 13… come with the instructions and the glossary again
 
 
 def cmd_import(args) -> int:
@@ -271,7 +308,8 @@ def cmd_import(args) -> int:
         return _after_all_done(project, args, args.next)
     elif args.next:
         print()
-        sys.stdout.write(_request(project, pending, True))
+        # Every few parts the full request again: a long conversation may have been compacted
+        sys.stdout.write(_request(project, pending, pending % FULL_EVERY != 0))
     else:
         print(f"Next: aisubs next {args.film}")
     return 0
@@ -342,16 +380,29 @@ def cmd_assemble(args) -> int:
     missing = sum(1 for i, item in enumerate(project.items) if not item.skip and None in texts[i])
     if missing and not args.partial:
         raise ProjectError(f"{missing} subtitles are not translated yet; see: aisubs status {args.film} (or use --partial)")
+    out = Path(args.output) if args.output else project.output_path()
+    if not args.output and not args.force and not project.owns_output(out):
+        raise ProjectError(f"{out} already exists and was not written by aisubs; use -o OTHER.srt, or --force to overwrite it")
+    _write_output(project, out, partial=args.partial, bom=args.bom)
+    print(f"Wrote {out}" + (f" ({missing} subtitles left in the original)" if missing else ""))
+    return 0
+
+
+def _write_output(project: Project, out: Path, *, partial: bool, bom: bool) -> None:
+    done = project.done()
+    texts: dict[int, list[str | None]] = {i: [None] * len(item.parts) for i, item in enumerate(project.items)}
+    for k in range(len(project.chunks)):
+        for key, i, p in project.chunk_keys(k):
+            texts[i][p] = done.get(k, {}).get(key)
     cues = []
     for i, item in enumerate(project.items):
         if not item.skip and None in texts[i]:
             cues.append(srt.Cue(item.start, item.end, item.source))  # --partial: keep the original
         else:
             cues.append(srt.Cue(item.start, item.end, assemble.cue_text(item, texts[i])))
-    out = Path(args.output) if args.output else project.output_path()
-    srt.write(out, cues, bom=args.bom, newline=project.meta["newline"])
-    print(f"Wrote {out}" + (f" ({missing} subtitles left in the original)" if missing else ""))
-    return 0
+    srt.write(out, cues, bom=bom, newline=project.meta["newline"])
+    if out == project.output_path():
+        project.mark_output(out)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -373,12 +424,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--encoding", help="source encoding if it is detected wrongly")
     p.add_argument("--force", action="store_true", help="start over, deleting existing translations")
     p.add_argument("--wikipedia", nargs="?", const="", metavar="PAGE", help="add the cast from Wikipedia to the glossary request (optionally the exact English article title)")
+    p.add_argument("--glossary", action="store_true", help="then print the glossary request, saving the agent a step")
     p.set_defaults(func=cmd_prepare)
 
     p = sub.add_parser("glossary", help="print the glossary request, or save the AI answer to it")
     p.add_argument("film")
     p.add_argument("answer", nargs="?", help="file with the AI answer, or - for stdin; without it the request is printed")
     p.add_argument("--wikipedia", nargs="?", const="", metavar="PAGE", help="first fetch the cast from Wikipedia (optionally the exact English article title)")
+    p.add_argument("--next", action="store_true", help="after saving, print the first translation request (if there are no warnings)")
     p.set_defaults(func=cmd_glossary)
 
     p = sub.add_parser("status", help="show translation progress")
@@ -421,6 +474,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", help="output file (default: film.uk.srt)")
     p.add_argument("--partial", action="store_true", help="keep untranslated subtitles in the original")
     p.add_argument("--bom", action="store_true", help="write a UTF-8 BOM (for old players)")
+    p.add_argument("--force", action="store_true", help="overwrite film.uk.srt even if aisubs did not write it")
     p.set_defaults(func=cmd_assemble)
     return parser
 

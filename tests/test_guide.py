@@ -13,7 +13,7 @@ class GuideTest(unittest.TestCase):
         text = guide.text("My Film.srt", "aisubs")
         self.assertNotIn("{", text)
         self.assertIn("Run the tool as: aisubs", text)
-        self.assertIn('`aisubs prepare "My Film.srt"`', text)
+        self.assertIn('`aisubs prepare "My Film.srt" --glossary`', text)
         self.assertIn('"My Film.aisubs/answer.txt"', text.replace("\\", "/"))
 
     def test_commands_and_options_exist(self):

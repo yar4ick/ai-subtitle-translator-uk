@@ -33,6 +33,13 @@ def fake_translate(request: str, drop: str | None = None) -> str:
     return "```\n" + "\n".join(lines) + "\n```\n"
 
 
+def ukrainian(request: str) -> str:
+    """A short Ukrainian answer for every ID of a request, which passes the checks."""
+    body = request.split("TRANSLATE")[1].split("CONTEXT (following")[0]
+    keys = [line.split("|")[0] for line in body.splitlines() if line[:1].isdigit()]
+    return "".join(f"{key}|ж>ч|Що?\n" for key in keys)
+
+
 class EndToEndTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -108,6 +115,19 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("TRANSLATE (part 2 of", out)
 
+    def test_every_fourth_part_comes_in_full(self):
+        film = self.tmp / "sintel.srt"
+        shutil.copy(FIXTURES / "sintel_en.srt", film)
+        run("prepare", str(film), "--chunk-size", "2")
+        _, request = run("next", str(film))
+        seen = []
+        for part in range(2, 7):
+            code, out = run("import", str(film), "--next", stdin=ukrainian(request))
+            self.assertIn(f"TRANSLATE (part {part} of", out)
+            seen.append("Translate film subtitles" in out)
+            request = out
+        self.assertEqual(seen, [False, False, False, True, False])  # part 5 is full
+
     def test_an_answer_sent_twice_is_not_taken_for_the_next_part(self):
         run("prepare", str(self.film), "--chunk-size", "2")
         _, request = run("next", str(self.film))
@@ -130,6 +150,32 @@ class EndToEndTest(unittest.TestCase):
         self.assertIn("(part 2 of", out)
         _, out = run("status", str(self.film))
         self.assertRegex(out, r"part +1/\d+: done")
+
+    def test_fewer_steps_for_an_agent(self):
+        code, out = run("prepare", str(self.film), "--glossary")
+        self.assertIn("Build a translation glossary", out)
+        code, out = run("glossary", str(self.film), "-", "--next", stdin="C|М|Marta|Марта|ж|доглядачка|сувора\n")
+        self.assertIn("Names: Марта (ж)", out)
+        self.assertIn("Translate film subtitles", out)  # the first full request
+        request = out.split("Names: Марта (ж)")[1]
+        code, out = run("import", str(self.film), "--next", stdin=ukrainian(request))
+        self.assertIn("Done.", out)
+        self.assertTrue((self.tmp / "Lighthouse.2021.uk.srt").exists())
+
+    def test_a_foreign_uk_srt_is_not_overwritten(self):
+        own = self.tmp / "Lighthouse.2021.uk.srt"
+        own.write_text("1\n00:00:01,000 --> 00:00:02,000\nчужий переклад\n", encoding="utf-8")
+        run("prepare", str(self.film))
+        _, request = run("next", str(self.film))
+        code, out = run("import", str(self.film), "--next", stdin=ukrainian(request))
+        self.assertIn("was not written by aisubs: not overwritten", out)
+        code, out = run("assemble", str(self.film))
+        self.assertEqual(code, 1)
+        self.assertIn("чужий переклад", own.read_text(encoding="utf-8"))
+        code, out = run("assemble", str(self.film), "--force")
+        self.assertEqual(code, 0, out)
+        code, out = run("assemble", str(self.film))  # now it is ours
+        self.assertEqual(code, 0, out)
 
     def test_translator_adds_a_character(self):
         run("prepare", str(self.film))

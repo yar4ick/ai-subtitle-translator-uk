@@ -1,0 +1,40 @@
+# Invented scenes for checking prompt changes cheaply (python3 tools/regress.py).
+# Glossary lines as in glossary.txt; then request lines `ID|[≤N|]English`, and after `##`
+# what the answer must satisfy: S= and A= (speaker codes), past=ч/ж (gender of every past-tense form), forbid= and require= (comma-separated
+# word beginnings, case-insensitive; a trailing $ means the whole word; a/b means a or b),
+# latin=ok (Latin letters allowed). Expect only what the text itself shows: a name, a role, an answer.
+STYLE|сучасна кримінальна драма, розмовна мова, лайка сильна, як в оригіналі
+PLOT|Детектив Рей розслідує пограбування в місті Ріверсайд; удома на нього чекає донька Емма.
+C|Р|Ray Walker|Рей Вокер|ч|детектив, батько Емми, 50 років|втомлений, сухий гумор
+C|Е|Emma Walker|Емма Вокер|ж|донька Рея, 17 років|зухвала, дотепна
+C|Т|Tom|Том|ч|напарник Рея|балакучий
+P|Е|Р|ти
+P|Р|Е|ти
+P|Р|Т|ти
+P|Т|Р|ти
+T|Riverside|Ріверсайд
+
+=
+1|You're late again, Dad. Forget your keys?  ## S=Е A=Р past=ч require=забув/лишив
+2|Yeah... I forgot them at the station.  ## S=Р A=Е past=ч require=забув/лишив/залишив
+3|You always forget something, Dad.  ## S=Е A=Р
+4|I told you, I just forgot.  ## S=Р A=Е past=ч
+5|Fine. Dinner's cold.  ## S=Е A=Р
+=
+6|Tom, did you call the lab?  ## S=Р A=Т
+7|I did. They said the prints are a match.  ## S=Т A=Р
+8|No shit.  ## S=Р A=Т forbid=лайн,гівн,базар
+9|Counting on you, Tom.  ## S=Р A=Т forbid=розраховую
+10|Shit, shit, shit!  ## forbid=блін,чорт,лайн
+11|Fuck off!  ## forbid=блін,чорт
+12|Damn it.  ## forbid=бля,нахуй,хуй
+=
+13|≤26|Well, I mean, I guess we could try again tomorrow, partner.  ## A=Т
+14|Ray, if this is about yesterday—  ## A=Р
+15|Wilson here. Heard about your daughter.  ## A=Р
+16|Ma'am, step out of the car, please.  ## forbid=ти$,тебе$,твій,виходь
+17|Welcome to Riverside, folks.  ## require=Ріверсайд
+18|We found an iPhone and a BMW key in the car.  ## latin=ok
+19|The FBI wants the case.  ## forbid=FBI
+=
+20|♪ Running down the river, running down the line ♪  ## forbid=Running
