@@ -89,6 +89,8 @@ def cmd_glossary(args) -> int:
     if g.cast:
         # Spoiler-free: names and gender only, no plot or roles
         print("Names: " + ", ".join(f"{row[2]} ({row[3]})" for row in g.cast))
+    if unsure_terms := [f"{en}={uk}" for en, uk in g.terms if uk.endswith("?")]:
+        print("Unsure terms: " + ", ".join(unsure_terms))
     data = project.candidates()
     lines = [part.text for item in project.items for part in item.parts]
     for warning in glossary.cross_check(g, data["candidates"], project.source_names(), lines=lines):
@@ -233,11 +235,17 @@ def cmd_import(args) -> int:
         if answer[key][2]:
             for problem in validate.checks.gender_conflicts(answer[key][0], answer[key][2], checker.cast):
                 print(f"gender check: {key}|{answer[key][2]}|{answer[key][0]} — {problem}")
-    if additions := glossary.parse_additions(text):
+    additions, characters = glossary.parse_additions(text), glossary.parse_cast_additions(text)
+    if additions or characters:
         g = project.glossary()
-        if added := glossary.add_terms(g, additions):
+        added = glossary.add_terms(g, additions)
+        cast = glossary.add_cast(g, characters)
+        if added or cast:
             project.save_glossary(g)
+        if added:
             print("glossary: added " + "; ".join(f"{en}={uk}" for en, uk in added))
+        if cast:
+            print("glossary: new characters " + "; ".join(f"{r[0]} {r[2]} ({r[3]})" for r in cast))
     if ignored:
         print(f"ignored {len(ignored)} lines that are not `ID|text`")
     if report["unknown"]:

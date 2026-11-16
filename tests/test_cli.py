@@ -131,6 +131,17 @@ class EndToEndTest(unittest.TestCase):
         _, out = run("status", str(self.film))
         self.assertRegex(out, r"part +1/\d+: done")
 
+    def test_translator_adds_a_character(self):
+        run("prepare", str(self.film))
+        run("glossary", str(self.film), "-", stdin="C|М|Marta|Марта|ж|доглядачка|сувора\n")
+        _, request = run("next", str(self.film))
+        code, out = run("import", str(self.film), stdin=fake_translate(request) + "+|C|К|Katsuo|Кацуо|ч|однокласник\n+|C|М|Mike|Майк|ч|x\n+|gonk=бовдур\n")
+        self.assertIn("glossary: new characters К Кацуо (ч)", out)
+        self.assertIn("glossary: added gonk=бовдур", out)
+        text = (self.tmp / "Lighthouse.2021.en.aisubs" / "glossary.txt").read_text(encoding="utf-8")
+        self.assertIn("C|К|Katsuo|Кацуо|ч|однокласник", text)
+        self.assertNotIn("Майк", text)  # the code М is taken
+
     def test_an_answer_for_another_unfinished_part_goes_there(self):
         run("prepare", str(self.film), "--chunk-size", "2")
         _, request = run("next", str(self.film), "--part", "2")

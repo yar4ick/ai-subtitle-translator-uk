@@ -72,13 +72,13 @@ class Project:
     def fetch_wikipedia(self, page: str | None = None) -> str:
         """Save the cast from Wikipedia for the glossary request. Return a message for the user."""
         try:
-            en_title, en, uk_title, uk = wiki.fetch(self.meta["title"], page or None)
+            en_title, en, uk_title, uk, uk_names = wiki.fetch(self.meta["title"], page or None)
         except wiki.WikiError as e:
             return f"Wikipedia: skipped ({e})"
-        if not en and not uk:
+        if not en and not uk and not uk_names:
             return f"Wikipedia: no cast section found in «{en_title}»; skipped"
         en, share = wiki.check(en, self.source_names())
-        self.wikipedia_path.write_text(wiki.render(en_title, en, uk_title, uk), encoding="utf-8")
+        self.wikipedia_path.write_text(wiki.render(en_title, en, uk_title, uk, uk_names), encoding="utf-8")
         message = f"Wikipedia: {len(en)} cast entries from «{en_title}»" + (f", {len(uk)} from «{uk_title}»" if uk else "")
         if en and share < 0.3:
             message += (f"\nwarning: only {share:.0%} of these characters occur in the subtitles; this may be another film."

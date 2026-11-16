@@ -24,6 +24,7 @@ PROMPTS = Path(__file__).parent / "prompts"
 _FIELDS = {"STYLE": 1, "PLOT": 1, "C": 6, "P": 4, "T": 2}
 # A term coined while translating: "+|choom=чумба"
 _ADDITION_RE = re.compile(r"^\s*\+\|\s*([^=|]+?)\s*=\s*(.+?)\s*$")
+_CAST_ADDITION_RE = re.compile(r"^\s*\+\|\s*C\s*\|(.+)$")
 
 
 @dataclass
@@ -92,7 +93,33 @@ def add_terms(g: Glossary, additions: list[tuple[str, str]]) -> list[tuple[str, 
 
 
 def parse_additions(text: str) -> list[tuple[str, str]]:
-    return [(m.group(1), m.group(2)) for line in text.splitlines() if (m := _ADDITION_RE.match(line))]
+    return [(m.group(1), m.group(2)) for line in text.splitlines()
+            if not _CAST_ADDITION_RE.match(line) and (m := _ADDITION_RE.match(line))]
+
+
+def parse_cast_additions(text: str) -> list[list[str]]:
+    """Characters the translator met during translation: `+|C|code|English|Українською|ч/ж|role`."""
+    rows = []
+    for line in text.splitlines():
+        if m := _CAST_ADDITION_RE.match(line):
+            fields = [f.strip() for f in m.group(1).split("|")]
+            if len(fields) >= 4 and fields[0] and fields[1] and fields[2]:
+                rows.append((fields + ["", ""])[:6])
+    return rows
+
+
+def add_cast(g: Glossary, rows: list[list[str]]) -> list[list[str]]:
+    """Add new characters unless their code or name is known. Return the added ones."""
+    codes = {c[0] for c in g.cast}
+    names = {c[1].strip(" ?").lower() for c in g.cast} | {t[0].lower() for t in g.terms}
+    added = []
+    for row in rows:
+        if row[0] not in codes and row[1].strip(" ?").lower() not in names:
+            g.cast.append(row)
+            codes.add(row[0])
+            names.add(row[1].strip(" ?").lower())
+            added.append(row)
+    return added
 
 
 def render(g: Glossary) -> str:
@@ -135,6 +162,8 @@ def build_request(title: str, found: list[dict], sample: list[str], extra: str =
             notes.append(f"address ×{c['vocative']}")
         if c["speaker"]:
             notes.append(f"SDH speaker ×{c['speaker']}")
+        if c.get("intro"):
+            notes.append(f"names themselves ×{c['intro']}")
         line = f"{c['name']} ×{c['count'] or c['speaker']}" + (f" ({', '.join(notes)})" if notes else "")
         if c["examples"]:
             line += ": " + " / ".join(c["examples"])
@@ -226,7 +255,8 @@ def cross_check(g: Glossary, found: list[dict], source_words: set[str], min_coun
         count = max(c.get("count", 0), c.get("speaker", 0))
         # A short form of a known name counts as known: Stan -> Stansfield
         known = any(n.startswith(w) for w in words for n in named)
-        if count >= min_count and words and not known and not any(w in t[0].lower() for t in g.terms for w in words):
-            out.append(f"{c['name']} occurs {count} times but is not in CAST or TERMS")
+        if (count >= min_count or c.get("intro")) and words and not known and not any(w in t[0].lower() for t in g.terms for w in words):
+            out.append(f"{c['name']} occurs {count} times" + (" and names themselves" if c.get("intro") else "")
+                       + " but is not in CAST or TERMS")
     return out
 

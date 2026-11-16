@@ -24,6 +24,8 @@ _ANY_TAG_RE = re.compile(r"<[^>]*>|[<>]")
 _JUNK_RE = re.compile(r"^\s*(?:≤\d+|S=[^|]*|[^\s|]{1,4}>[^\s|]{1,4})\s*\||\|")
 _WORD_RE = re.compile(r"[А-ЯІЇЄҐ][а-яіїєґʼ'’-]+")
 _LATIN_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'’-]+")
+_LATIN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9'’-]*")  # also one letter or "XBD", "R2"
+_ROMAN_RE = re.compile(r"[IVXLC]+")
 
 
 @dataclass
@@ -52,6 +54,9 @@ class Checker:
                     self.origin.setdefault(w, set()).update(x.lower() for x in _LATIN_WORD_RE.findall(en))
         self.names = sorted(self.origin)
         self.stems = {_stem(w) for w in self.names}
+        # Latin words the glossary itself keeps in Ukrainian lines ("T|iPhone|iPhone")
+        self.latin_ok = {w.lower() for row in g.cast for w in _LATIN_WORD_RE.findall(row[2])}
+        self.latin_ok |= {w.lower() for row in g.terms for w in _LATIN_WORD_RE.findall(row[1])}
         self.english = {}  # English cast name word -> Ukrainian name
         for row in g.cast:
             for w in _LATIN_WORD_RE.findall(row[1]):
@@ -70,6 +75,10 @@ class Checker:
             left = sorted({w for w in _LATIN_WORD_RE.findall(plain) if w.lower() in self.english})
             if left:
                 out.append((True, "name left in English: " + ", ".join(f"{w} (glossary: {self.english[w.lower()]})" for w in left)))
+            latin = sorted({w for w in _LATIN_TOKEN_RE.findall(_ANY_TAG_RE.sub("", plain)) if w.lower() not in self.english and w.lower() not in self.latin_ok
+                            and not _ROMAN_RE.fullmatch(w)})
+            if latin and _CYRILLIC_RE.search(plain):
+                out.append((True, "Latin letters left: " + ", ".join(latin) + " (transliterate or translate)"))
         if _RUSSIAN_RE.search(plain):
             out.append((True, "Russian letters: " + "".join(sorted(set(_RUSSIAN_RE.findall(plain))))))
         if _ANY_TAG_RE.sub("", _TAG_RE.sub("", text)) != _TAG_RE.sub("", text) or text.count("<i>") != text.count("</i>"):

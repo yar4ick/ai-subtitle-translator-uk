@@ -19,7 +19,7 @@ STEPS
 2. Glossary: `aisubs glossary {film}` prints a request. Answer it in a file and save it: `aisubs glossary {film} {work}/glossary-answer.txt`.
    If you do not know the film and can search the web, one search for its cast is enough (names, gender, roles, relations; do not open whole pages).
    If it prints warnings, check them against the request and, where they are right, write the whole corrected answer to the file again and save it again.
-   Then show the user only the `Names:` line it printed (names and gender, no plot or roles) and go on without waiting, unless the user asked to check the glossary first: then show them the CAST names with gender and the PAIRS (ти/ви), still without plot or roles, and wait.
+   Then show the user only the `Names:` and `Unsure terms:` lines it printed (names, gender and terms, no plot or roles) and go on without waiting, unless the user asked to check the glossary first: then show them the CAST names with gender and the PAIRS (ти/ви), still without plot or roles, and wait.
 3. Translate: `aisubs next {film}` prints the first request (instructions, glossary, lines). Write the answer to a file, then `aisubs import {film} {work}/answer.txt --next`.
    It reports what was accepted and prints the next request in brief form (no instructions: keep following the ones you already have). Repeat with each new request until it says all parts are translated.
    If lines are missing, the brief request asks only for them. If the conversation was restarted and you no longer have the instructions, use `aisubs next {film}` (full) instead of the brief form.

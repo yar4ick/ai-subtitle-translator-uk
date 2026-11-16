@@ -41,8 +41,8 @@ def genders(g: Glossary) -> dict[str, str]:
     """Cast code -> 'ч' / 'ж' (the bare letters ч, ж work as codes too)."""
     out = dict(_GENDERS)
     for code, _, _, gender, *_ in g.cast:
-        gender = gender.strip(" ?").lower()
-        if gender in ("ч", "ж"):
+        gender = gender.strip().lower()
+        if gender in ("ч", "ж"):  # a guess ("ж?") is not checked: the line may be right and the guess wrong
             out[code] = gender
     return out
 

@@ -37,7 +37,13 @@ _TEMPLATE_RE = re.compile(r"\{\{([^{}]*)\}\}")
 # Templates whose arguments are the list itself
 _CONTAINERS = {"cast listing", "div col", "columns-list", "col-begin", "gallery", "plainlist", "ubl", "unbulleted list", "flatlist", "div col end"}
 # Templates that stand for their first argument
-_FIRST_ARG = {"nihongo", "lang", "nowrap", "small", "nobold", "abbr", "nihongo2", "ill", "illm", "anchor"}
+_FIRST_ARG = {"nihongo", "lang", "nowrap", "small", "nobold", "abbr", "nihongo2", "ill", "illm", "anchor",
+              "ніхонґо", "ніхонго", "нп", "lang-en", "не перекладено"}
+MAX_NAMES = 40
+# A capitalized Ukrainian word or name in running text: «Гокінс», «Вілл Баєрс», «Найт-Сіті»
+_UK_NAME_RE = re.compile(r"\b[А-ЯІЇЄҐ][а-яіїєґʼ'’]+(?:[- ][А-ЯІЇЄҐ][а-яіїєґʼ'’]+)*")
+# «Нічного міста (англ. Night City)»
+_UK_PAIR_RE = re.compile(r"«?([А-ЯІЇЄҐ][\w'’-]*(?:\s+[\w'’-]+){0,2})»?\s*\((?:англ|анг)\.\s*([^)]+)\)")
 _TV_RE = re.compile(r"\bS\d{1,2}\s*E\d{1,3}\b.*$", re.I)
 _YEAR_RE = re.compile(r"\((\d{4})\)")
 
@@ -131,6 +137,20 @@ def entries(wikitext: str, pattern: re.Pattern) -> list[str]:
     return [_shorten(e) for e in out if e][:MAX_ENTRIES]
 
 
+def uk_names(wikitext: str) -> list[str]:
+    """Names and terms of the Ukrainian article not at a sentence start, seen at least twice,
+    and «term (англ. term)» pairs: established Ukrainian spellings for the glossary."""
+    text = clean(wikitext)
+    counts: dict[str, int] = {}
+    for m in _UK_NAME_RE.finditer(text):
+        if m.start() == 0 or re.search(r"[.!?…:;\n]\s*$", text[max(0, m.start() - 3):m.start()]):
+            continue
+        counts[m.group()] = counts.get(m.group(), 0) + 1
+    names = [w for w, n in sorted(counts.items(), key=lambda kv: -kv[1]) if n >= 2][:MAX_NAMES]
+    pairs = [f"{uk.strip(' «»')} = {en.strip()}" for uk, en in _UK_PAIR_RE.findall(text)][:MAX_NAMES]
+    return names + pairs
+
+
 def character(entry: str) -> str:
     """The character's name in a cast entry: "Jean Reno as Léon, a hitman" -> "Léon"."""
     for sep in (" as ", " — ", " – ", " - "):
@@ -166,24 +186,24 @@ def find_article(title: str) -> str:
     raise WikiError(f"no Wikipedia article found for {name!r}")
 
 
-def fetch(title: str, page: str | None = None) -> tuple[str, list[str], str, list[str]]:
-    """(English title, English entries, Ukrainian title, Ukrainian entries)."""
+def fetch(title: str, page: str | None = None) -> tuple[str, list[str], str, list[str], list[str]]:
+    """(English title, English entries, Ukrainian title, Ukrainian entries, Ukrainian names)."""
     page = page or find_article(title)
     data = _api("en.wikipedia.org", action="parse", page=page, prop="wikitext|langlinks", redirects=1)
     if "error" in data:
         raise WikiError(data["error"].get("info", "parse error"))
     parsed = data["parse"]
     en = entries(parsed["wikitext"], _CAST_EN)
-    uk_title, uk = "", []
+    uk_title, uk, names = "", [], []
     link = next((l for l in parsed.get("langlinks", []) if l.get("lang") == "uk"), None)
     if link:
         uk_title = link["title"]
         try:
-            uk_data = _api("uk.wikipedia.org", action="parse", page=uk_title, prop="wikitext", redirects=1)
-            uk = entries(uk_data["parse"]["wikitext"], _CAST_UK)
+            uk_text = _api("uk.wikipedia.org", action="parse", page=uk_title, prop="wikitext", redirects=1)["parse"]["wikitext"]
+            uk, names = entries(uk_text, _CAST_UK), uk_names(uk_text)
         except (WikiError, KeyError):
-            uk = []
-    return parsed["title"], en, uk_title, uk
+            uk, names = [], []
+    return parsed["title"], en, uk_title, uk, names
 
 
 def check(en: list[str], names: set[str]) -> tuple[list[str], float]:
@@ -197,8 +217,12 @@ def check(en: list[str], names: set[str]) -> tuple[list[str], float]:
     return out, (found / len(en) if en else 0.0)
 
 
-def render(en_title: str, en: list[str], uk_title: str, uk: list[str]) -> str:
-    out = [f"WIKIPEDIA (cast of «{en_title}»; may be incomplete):"] + en
+def render(en_title: str, en: list[str], uk_title: str, uk: list[str], names: list[str] = ()) -> str:
+    out = []
+    if en:
+        out += [f"WIKIPEDIA (cast of «{en_title}»; may be incomplete):"] + en
     if uk:
         out += ["", f"UKRAINIAN WIKIPEDIA («{uk_title}»; established Ukrainian names):"] + uk
-    return "\n".join(out) + "\n"
+    if names:
+        out += ["", f"UKRAINIAN SPELLINGS in «{uk_title}» (names and terms, in any case form):", ", ".join(names)]
+    return "\n".join(out).strip("\n") + "\n"

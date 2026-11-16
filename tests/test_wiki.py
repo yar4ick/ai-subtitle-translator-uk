@@ -70,6 +70,18 @@ class ParseTest(unittest.TestCase):
         self.assertAlmostEqual(share, 2 / 3)
 
 
+class UkNamesTest(unittest.TestCase):
+    def test_names_and_pairs(self):
+        text = ("Серіал про місто Гокінс. У Гокінсі зникає хлопчик Вілл Баєрс. Друзі шукають Вілл Баєрс у лісі.\n"
+                "Дія відбувається в Гокінс, де є {{Ніхонґо|Виворіт|x}} і знову Виворіт. Місто (англ. Night City) велике.")
+        names = wiki.uk_names(text)
+        self.assertIn("Вілл Баєрс", names)
+        self.assertIn("Гокінс", names)
+        self.assertIn("Виворіт", names)
+        self.assertNotIn("Серіал", names)  # starts a sentence
+        self.assertIn("Місто = Night City", names)
+
+
 class FetchTest(unittest.TestCase):
     def fake_api(self, host, **params):
         if params.get("list") == "search":
@@ -81,7 +93,7 @@ class FetchTest(unittest.TestCase):
 
     def test_fetch(self):
         with mock.patch.object(wiki, "_api", self.fake_api):
-            title, en, uk_title, uk = wiki.fetch("Léon The Professional (1994)")
+            title, en, uk_title, uk, _ = wiki.fetch("Léon The Professional (1994)")
         self.assertEqual(title, "Léon: The Professional")
         self.assertEqual(len(en), 5)
         self.assertEqual(uk_title, "Леон (фільм)")
