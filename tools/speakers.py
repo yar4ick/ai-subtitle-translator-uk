@@ -100,6 +100,17 @@ def name_matcher(g: glossary.Glossary):
     return match
 
 
+def _chains(numbers: list[int]) -> str:
+    """"3 (34–36), 1 (56)": one mistake early in a scene often makes several wrong lines."""
+    runs: list[list[int]] = []
+    for n in sorted(numbers):
+        if runs and n == runs[-1][-1] + 1:
+            runs[-1].append(n)
+        else:
+            runs.append([n])
+    return ", ".join(f"{len(r)} ({r[0]}–{r[-1]})" if len(r) > 1 else f"1 ({r[0]})" for r in runs) or "none"
+
+
 def score(film: Path, labels_path: Path) -> str:
     project = Project(film).load()
     g = project.glossary()
@@ -153,6 +164,7 @@ def score(film: Path, labels_path: Path) -> str:
         f"Right among sure: {sum(r[2] == r[3] for r in sure)}/{len(sure)}",
         f"Marked ?: {len(unsure)}, of them wrong: {sum(r[2] != r[3] for r in unsure)}; wrong lines marked: {len(wrong) - len(silent)}/{len(wrong)}",
         f"Speaker gender right: {same_gender}/{len(gendered)} (lines of cast members)",
+        f"Error chains (wrong lines in a row): {_chains([r[0] for r in wrong])}",
         "",
         "Wrong lines (number, key, expected, model):",
     ]

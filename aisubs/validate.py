@@ -137,47 +137,53 @@ def run(project) -> tuple[list[Problem], dict]:
                     if fix and tried:
                         fix, message = False, message + " (after a retry)"
                     problems.append(Problem(k, key, fix, message, part.text, have[key]))
-                if key in flags.get(k, []):
+                # A doubt about who speaks matters only where the line shows gender
+                if key in flags.get(k, []) and checks.shows_gender(have[key]):
                     problems.append(Problem(k, key, False, "the model was unsure who speaks (?)", part.text, have[key]))
     return problems, stats
 
 
-def fix_request(project, k: int, problems: list[Problem], *, brief: bool, instructions: str = "") -> str:
-    """Ask the model again for the lines of part k that have `fix` problems."""
-    speakers = project.speakers().get(k, {})
-    keyed = {key: (i, p) for key, i, p in project.chunk_keys(k)}
-    wanted: dict[str, list[str]] = {}
-    for pr in problems:
-        if pr.k == k and pr.fix:
-            wanted.setdefault(pr.key, []).append(pr.message)
+def fix_request(project, ks, problems: list[Problem], *, brief: bool, instructions: str = "") -> str:
+    """Ask the model again for the lines with `fix` problems in part k, or in all the parts ks
+    (one request for the whole film when line IDs run through the film)."""
+    ks = [ks] if isinstance(ks, int) else list(ks)
+    speakers_all, done_all = project.speakers(), project.done()
     out = [] if brief else [instructions, ""]
+    where = f"part {ks[0] + 1}" if len(ks) == 1 else "parts " + ", ".join(str(k + 1) for k in ks)
     out.append(
-        f"FIX (part {k + 1} of {len(project.chunks)}): translate these lines again. "
+        f"FIX ({where} of {len(project.chunks)}): translate these lines again. "
         "Under each line are your earlier answer and what is wrong with it. "
         "Answer as usual, `ID|S>A|translation`, only for these IDs. Keep the earlier S>A unless "
         "the problem is the gender. `before:` and `after:` are neighbouring lines, for the sense only."
     )
-    done = project.done().get(k, {})
-    order = list(keyed)
+    for k in ks:
+        speakers = speakers_all.get(k, {})
+        keyed = {key: (i, p) for key, i, p in project.chunk_keys(k)}
+        wanted: dict[str, list[str]] = {}
+        for pr in problems:
+            if pr.k == k and pr.fix:
+                wanted.setdefault(pr.key, []).append(pr.message)
+        done = done_all.get(k, {})
+        order = list(keyed)
 
-    def neighbour(n: int, label: str) -> None:
-        if 0 <= n < len(order) and order[n] not in wanted:
-            j, q = keyed[order[n]]
-            out.append(f"  {label}: {project.items[j].parts[q].text} => {done.get(order[n], '')}")
+        def neighbour(n: int, label: str) -> None:
+            if 0 <= n < len(order) and order[n] not in wanted:
+                j, q = keyed[order[n]]
+                out.append(f"  {label}: {project.items[j].parts[q].text} => {done.get(order[n], '')}")
 
-    for key in sorted(wanted, key=order.index):
-        n = order.index(key)
-        i, p = keyed[key]
-        neighbour(n - 1, "before")
-        item = project.items[i]
-        fields = [key]
-        if item.parts[p].speaker:
-            fields.append("S=" + item.parts[p].speaker)
-        if any(m.startswith("too long") for m in wanted[key]):
-            fields.append(f"≤{limits.budgets(item)[p]}")
-        out.append("|".join(fields + [item.parts[p].text]))
-        sa = speakers.get(key, "")
-        out.append(f"  was: {sa + '|' if sa else ''}{done.get(key, '')}")
-        out.append("  wrong: " + "; ".join(wanted[key]))
-        neighbour(n + 1, "after")
+        for key in sorted(wanted, key=order.index):
+            n = order.index(key)
+            i, p = keyed[key]
+            neighbour(n - 1, "before")
+            item = project.items[i]
+            fields = [key]
+            if item.parts[p].speaker:
+                fields.append("S=" + item.parts[p].speaker)
+            if any(m.startswith("too long") for m in wanted[key]):
+                fields.append(f"≤{limits.budgets(item)[p]}")
+            out.append("|".join(fields + [item.parts[p].text]))
+            sa = speakers.get(key, "")
+            out.append(f"  was: {sa + '|' if sa else ''}{done.get(key, '')}")
+            out.append("  wrong: " + "; ".join(wanted[key]))
+            neighbour(n + 1, "after")
     return "\n".join(out) + "\n"

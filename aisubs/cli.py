@@ -48,6 +48,10 @@ def cmd_prepare(args) -> int:
     print(f"Parts: {len(project.chunks)}")
     if args.wikipedia is not None:
         print(project.fetch_wikipedia(args.wikipedia))
+    if args.glossary:
+        print()
+        sys.stdout.write(project.glossary_request())
+        return 0
     print(f"Next: aisubs glossary {args.film}  (or skip it: aisubs next {args.film})")
     return 0
 
@@ -93,8 +97,16 @@ def cmd_glossary(args) -> int:
         print("Unsure terms: " + ", ".join(unsure_terms))
     data = project.candidates()
     lines = [part.text for item in project.items for part in item.parts]
-    for warning in glossary.cross_check(g, data["candidates"], project.source_names(), lines=lines):
+    warnings = glossary.cross_check(g, data["candidates"], project.source_names(), lines=lines)
+    for warning in warnings:
         print(f"warning: {warning}")
+    if args.next and not warnings and (k := project.pending_chunk()) is not None:
+        print()
+        sys.stdout.write(_request(project, k, False))
+        return 0
+    if args.next and warnings:
+        print("Check the warnings: save a corrected glossary the same way, or go on with: aisubs next " + str(args.film))
+        return 0
     print(f"Next: aisubs next {args.film}")
     return 0
 
@@ -142,8 +154,18 @@ def cmd_next(args) -> int:
 _REFUSAL_RE = re.compile(r"\b(I can(?:not|'t)|I'm sorry|I am sorry|I'm unable|I am unable|I won't)\b|не можу|вибачте", re.I)
 
 
-def _fix_part(project: Project, problems: list[validate.Problem]) -> int | None:
-    return min((p.k for p in problems if p.fix), default=None)
+def _fix_parts(project: Project, problems: list[validate.Problem]) -> list[int]:
+    """Parts with lines to fix: all of them in one request when IDs run through the film,
+    else (old projects, IDs from 1 in every part) the first one."""
+    ks = sorted({p.k for p in problems if p.fix})
+    return ks if project.meta.get("format", 1) > 1 else ks[:1]
+
+
+def _gender_report(project: Project, answer: dict) -> None:
+    checker = validate.Checker(project.glossary())
+    for key, (text, _, sa) in answer.items():
+        for problem in validate.checks.gender_conflicts(text, sa, checker.cast) if sa else []:
+            print(f"gender check: {key}|{sa}|{text} — {problem}")
 
 
 def _report(project: Project, problems: list[validate.Problem], stats: dict, limit: int = 30) -> list[str]:
@@ -174,27 +196,53 @@ def _after_all_done(project: Project, args, brief_next: bool) -> int:
     """Validate; with --next also print the fix request, if any."""
     problems, lines = _validate(project)
     print("\n".join(lines))
-    k = _fix_part(project, problems)
-    if k is None:
+    ks = _fix_parts(project, problems)
+    if not ks:
+        if brief_next:
+            print("Nothing to fix.")
+            return _finish(project, problems, args.film)
         nxt = "review" if problems else "assemble"
         print(f"Nothing to fix. Next: aisubs {nxt} {args.film}")
         return 0
     if brief_next:
         print()
-        sys.stdout.write(validate.fix_request(project, k, problems, brief=True))
+        sys.stdout.write(validate.fix_request(project, ks, problems, brief=True))
     else:
         print(f"Next: aisubs fix {args.film}")
     return 0
+
+
+def _finish(project: Project, problems: list, film) -> int:
+    """The last steps without asking: the review file and the translated .srt."""
+    path = project.dir / "review.txt"
+    text, count = review.render(project, problems, str(film))
+    if count:
+        if path.exists() and review.apply(project, path.read_text(encoding="utf-8-sig"), dry_run=True)[0]:
+            print(f"{path} has edits that are not saved yet; it was left as it is (aisubs review {film} --apply)")
+        else:
+            path.write_text(text, encoding="utf-8")
+            print(f"Wrote {path}: {count} lines to look at (the user can fix them, then: aisubs review {film} --apply)")
+    out = project.output_path()
+    if not project.owns_output(out):
+        print(f"{out} already exists and was not written by aisubs: not overwritten. Write it with: aisubs assemble {film} -o OTHER.srt")
+        return 0
+    _write_output(project, out, partial=False, bom=False)
+    print(f"Wrote {out}. Done.")
+    return 0
+
+
+FULL_EVERY = 4  # parts 5, 9, 13… come with the instructions and the glossary again
 
 
 def cmd_import(args) -> int:
     project = Project(args.film).load()
     if args.fix:
         problems, _ = validate.run(project)
-        k = _fix_part(project, problems) if args.part is None else _chunk_arg(project, args.part)
-        if k is None:
+        ks = _fix_parts(project, problems) if args.part is None else [_chunk_arg(project, args.part)]
+        if not ks or ks[0] is None:
             print(f"Nothing to fix. Next: aisubs assemble {args.film}")
             return 0
+        k = ks[0]
     else:
         k = _chunk_arg(project, args.part)
         if k is None:
@@ -208,7 +256,8 @@ def cmd_import(args) -> int:
     if not args.fix and args.part is None and answer:
         # Line IDs run through the film, so the answer itself says which part it is
         own = project.part_of(answer)
-        if own is not None and own != k:
+        # Only when the answer has no line of the part it was asked for
+        if own is not None and own != k and not set(answer) & set(project.keys(k)):
             if project.is_complete(own):
                 print(f"These lines are from part {own + 1}, which is already translated: nothing saved "
                       f"(an answer sent twice?). To replace that part: aisubs import {args.film} FILE --part {own + 1}")
@@ -220,9 +269,22 @@ def cmd_import(args) -> int:
                 return 0
             k = own
     if args.fix:
-        wanted = {p.key for p in problems if p.k == k and p.fix}
-        answer = {key: v for key, v in answer.items() if key in wanted}
-    report = project.save(k, answer, exchange.parse_notes(text), retry=args.fix)
+        # Lines of several parts in one answer: each goes to the part that asked for it
+        accepted, wanted_all = [], set()
+        for kk in ks:
+            wanted = {p.key for p in problems if p.k == kk and p.fix}
+            wanted_all |= wanted
+            part_answer = {key: v for key, v in answer.items() if key in wanted}
+            if part_answer:
+                saved = project.save(kk, part_answer, retry=True)["accepted"]
+                accepted += saved
+                print(f"part {kk + 1}/{len(project.chunks)}: accepted {len(saved)} lines")
+        _gender_report(project, {key: answer[key] for key in accepted})
+        left = sorted(wanted_all - set(accepted), key=lambda key: (len(key), key))
+        if left:
+            print(f"not answered: {', '.join(left)}")
+        return _after_all_done(project, args, args.next)
+    report = project.save(k, answer, exchange.parse_notes(text))
     if not report["accepted"] and _REFUSAL_RE.search(text):
         project.set_refused(k, True)
         print(f"part {k + 1}: the AI seems to have refused to translate it. Try again in a new chat, "
@@ -230,11 +292,7 @@ def cmd_import(args) -> int:
         return 3
     project.set_refused(k, False)
     print(f"part {k + 1}/{len(project.chunks)}: accepted {len(report['accepted'])} lines")
-    checker = validate.Checker(project.glossary())
-    for key in report["accepted"]:
-        if answer[key][2]:
-            for problem in validate.checks.gender_conflicts(answer[key][0], answer[key][2], checker.cast):
-                print(f"gender check: {key}|{answer[key][2]}|{answer[key][0]} — {problem}")
+    _gender_report(project, {key: answer[key] for key in report["accepted"]})
     additions, characters = glossary.parse_additions(text), glossary.parse_cast_additions(text)
     if additions or characters:
         g = project.glossary()
@@ -252,11 +310,6 @@ def cmd_import(args) -> int:
         print("unknown IDs (ignored): " + ", ".join(report["unknown"]))
     if report["empty"]:
         print("empty translations (not accepted): " + ", ".join(report["empty"]))
-    if args.fix:
-        left = sorted(wanted - set(report["accepted"]))
-        if left:
-            print(f"not answered: {', '.join(left)}")
-        return _after_all_done(project, args, args.next)
     if report["missing"]:
         print(f"missing {len(report['missing'])} lines: " + ", ".join(report["missing"][:30]))
         if args.next:
@@ -271,7 +324,8 @@ def cmd_import(args) -> int:
         return _after_all_done(project, args, args.next)
     elif args.next:
         print()
-        sys.stdout.write(_request(project, pending, True))
+        # Every few parts the full request again: a long conversation may have been compacted
+        sys.stdout.write(_request(project, pending, pending % FULL_EVERY != 0))
     else:
         print(f"Next: aisubs next {args.film}")
     return 0
@@ -283,7 +337,7 @@ def cmd_validate(args) -> int:
         print(f"Not all parts are translated yet; checking what is done (aisubs status {args.film}).")
     problems, lines = _validate(project)
     print("\n".join(lines))
-    if _fix_part(project, problems) is not None:
+    if _fix_parts(project, problems):
         print(f"Next: aisubs fix {args.film}")
         return 2
     nxt = "review" if any(not p.fix for p in problems) else "assemble"
@@ -294,11 +348,12 @@ def cmd_validate(args) -> int:
 def cmd_fix(args) -> int:
     project = Project(args.film).load()
     problems, _ = validate.run(project)
-    k = _fix_part(project, problems) if args.part is None else _chunk_arg(project, args.part)
-    if k is None or not any(p.k == k and p.fix for p in problems):
+    ks = _fix_parts(project, problems) if args.part is None else [_chunk_arg(project, args.part)]
+    ks = [k for k in ks if k is not None and any(p.k == k and p.fix for p in problems)]
+    if not ks:
         print(f"Nothing to fix. Next: aisubs assemble {args.film}")
         return 0
-    sys.stdout.write(validate.fix_request(project, k, problems, brief=args.brief, instructions=_header(project)))
+    sys.stdout.write(validate.fix_request(project, ks, problems, brief=args.brief, instructions=_header(project)))
     return 0
 
 
@@ -342,16 +397,29 @@ def cmd_assemble(args) -> int:
     missing = sum(1 for i, item in enumerate(project.items) if not item.skip and None in texts[i])
     if missing and not args.partial:
         raise ProjectError(f"{missing} subtitles are not translated yet; see: aisubs status {args.film} (or use --partial)")
+    out = Path(args.output) if args.output else project.output_path()
+    if not args.output and not args.force and not project.owns_output(out):
+        raise ProjectError(f"{out} already exists and was not written by aisubs; use -o OTHER.srt, or --force to overwrite it")
+    _write_output(project, out, partial=args.partial, bom=args.bom)
+    print(f"Wrote {out}" + (f" ({missing} subtitles left in the original)" if missing else ""))
+    return 0
+
+
+def _write_output(project: Project, out: Path, *, partial: bool, bom: bool) -> None:
+    done = project.done()
+    texts: dict[int, list[str | None]] = {i: [None] * len(item.parts) for i, item in enumerate(project.items)}
+    for k in range(len(project.chunks)):
+        for key, i, p in project.chunk_keys(k):
+            texts[i][p] = done.get(k, {}).get(key)
     cues = []
     for i, item in enumerate(project.items):
         if not item.skip and None in texts[i]:
             cues.append(srt.Cue(item.start, item.end, item.source))  # --partial: keep the original
         else:
             cues.append(srt.Cue(item.start, item.end, assemble.cue_text(item, texts[i])))
-    out = Path(args.output) if args.output else project.output_path()
-    srt.write(out, cues, bom=args.bom, newline=project.meta["newline"])
-    print(f"Wrote {out}" + (f" ({missing} subtitles left in the original)" if missing else ""))
-    return 0
+    srt.write(out, cues, bom=bom, newline=project.meta["newline"])
+    if out == project.output_path():
+        project.mark_output(out)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -373,12 +441,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--encoding", help="source encoding if it is detected wrongly")
     p.add_argument("--force", action="store_true", help="start over, deleting existing translations")
     p.add_argument("--wikipedia", nargs="?", const="", metavar="PAGE", help="add the cast from Wikipedia to the glossary request (optionally the exact English article title)")
+    p.add_argument("--glossary", action="store_true", help="then print the glossary request, saving the agent a step")
     p.set_defaults(func=cmd_prepare)
 
     p = sub.add_parser("glossary", help="print the glossary request, or save the AI answer to it")
     p.add_argument("film")
     p.add_argument("answer", nargs="?", help="file with the AI answer, or - for stdin; without it the request is printed")
     p.add_argument("--wikipedia", nargs="?", const="", metavar="PAGE", help="first fetch the cast from Wikipedia (optionally the exact English article title)")
+    p.add_argument("--next", action="store_true", help="after saving, print the first translation request (if there are no warnings)")
     p.set_defaults(func=cmd_glossary)
 
     p = sub.add_parser("status", help="show translation progress")
@@ -421,6 +491,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", help="output file (default: film.uk.srt)")
     p.add_argument("--partial", action="store_true", help="keep untranslated subtitles in the original")
     p.add_argument("--bom", action="store_true", help="write a UTF-8 BOM (for old players)")
+    p.add_argument("--force", action="store_true", help="overwrite film.uk.srt even if aisubs did not write it")
     p.set_defaults(func=cmd_assemble)
     return parser
 

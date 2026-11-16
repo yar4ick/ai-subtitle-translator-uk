@@ -179,6 +179,16 @@ class Project:
                 out[k] = json.loads(path.read_text(encoding="utf-8")).get("speakers", {})
         return out
 
+    def mark_output(self, path: Path) -> None:
+        """Remember the file `assemble` wrote, so that it may be overwritten later."""
+        self.meta["output"] = {"name": path.name, "sha256": _sha256(path)}
+        _write_json(self.dir / "meta.json", self.meta)
+
+    def owns_output(self, path: Path) -> bool:
+        """True if the file does not exist or is the one this project wrote last."""
+        mark = self.meta.get("output", {})
+        return not path.exists() or (mark.get("name") == path.name and mark.get("sha256") == _sha256(path))
+
     def set_refused(self, k: int, refused: bool) -> None:
         marks = set(self.meta.get("refused", []))
         new = marks | {k} if refused else marks - {k}

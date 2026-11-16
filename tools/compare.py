@@ -151,6 +151,43 @@ def capitalized(cues: list[srt.Cue]) -> Counter[str]:
     return names
 
 
+_EN_STRONG_RE = re.compile(r"\b(fuck\w*|shit\w*|bitch\w*|ass|asshole|dick|cunt|motherfuck\w*)\b", re.IGNORECASE)
+_UK_STRONG_RE = re.compile(r"(?<!\w)(бля\w*|сук\w*|йоб\w*|єб\w*|нах\w*|хуй\w*|хуї\w*|хер\w*|пізд\w*|курв\w*|срак\w*|гівн\w*|лайн\w*|дуп\w*)", re.IGNORECASE)
+_UK_SOFT_RE = re.compile(r"(?<!\w)(блін\w*|чорт\w*|дідьк\w*|трясц\w*|хрін\w*|холера)", re.IGNORECASE)
+_LATIN_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9'’-]*")
+
+
+def extra_metrics(en: list[srt.Cue], ours: list[srt.Cue]) -> list[tuple[str, str, list[str]]]:
+    """(name, value, examples) for things the tables above do not show."""
+    en_at = {(c.start, c.end): c for c in en}
+    pairs = [(plain(en_at[(c.start, c.end)].text), plain(c.text)) for c in ours
+             if (c.start, c.end) in en_at and _CYRILLIC_RE.search(c.text)]
+    out = []
+    latin = [(e, u) for e, u in pairs if [w for w in _LATIN_WORD_RE.findall(u) if not re.fullmatch(r"[IVXLC]+", w)]]
+    out.append(("Рядки з латиницею", str(len(latin)), [u for _, u in latin[:5]]))
+    strong = [(e, u) for e, u in pairs if _EN_STRONG_RE.search(e)]
+    kept = sum(1 for _, u in strong if _UK_STRONG_RE.search(u))
+    softened = [(e, u) for e, u in strong if not _UK_STRONG_RE.search(u) and _UK_SOFT_RE.search(u)]
+    added = [(e, u) for e, u in pairs if not _EN_STRONG_RE.search(e) and _UK_STRONG_RE.search(u)]
+    out.append(("Сильна лайка оригіналу збережена", f"{kept}/{len(strong)}", []))
+    out.append(("Сильна лайка пом'якшена (блін, чорт…)", str(len(softened)), [f"{e} → {u}" for e, u in softened[:5]]))
+    out.append(("Сильна лайка там, де в оригіналі її немає", str(len(added)), [f"{e} → {u}" for e, u in added[:5]]))
+    # The same word written with a capital and a small letter inside sentences: «академії» / «Академію»
+    seen: dict[str, set[str]] = {}
+    for _, u in pairs:
+        for m in re.finditer(r"(?<=[\w,;] )([А-ЯІЇЄҐа-яіїєґ][а-яіїєґʼ'’]{3,})", u):
+            w = m.group(1)
+            seen.setdefault(w[:-2].lower() if len(w) > 6 else w.lower(), set()).add(w[0])
+    mixed = sorted(k for k, first in seen.items() if len({c.isupper() for c in first}) > 1)
+    out.append(("Слова то з великої, то з малої літери", str(len(mixed)), mixed[:8]))
+    # Much shorter than the original although the line has room (below 12 CPS)
+    short = [(e, u, c) for c in ours if (c.start, c.end) in en_at and _CYRILLIC_RE.search(c.text)
+             for e, u in [(plain(en_at[(c.start, c.end)].text), plain(c.text))]
+             if len(e) >= 30 and len(u) < 0.6 * len(e) and cps(c.text, c) < 12]
+    out.append(("Стиснуто без потреби (< 60% оригіналу, < 12 CPS)", str(len(short)), [f"{e} → {u}" for e, u, _ in short[:5]]))
+    return out
+
+
 def report(en: list[srt.Cue], ours: list[srt.Cue], ref: list[srt.Cue], title: str, samples: int) -> str:
     timing = detect_timing(ours, ref)
     groups = align(ours, ref, timing[1], timing[2])
@@ -220,6 +257,11 @@ def report(en: list[srt.Cue], ours: list[srt.Cue], ref: list[srt.Cue], title: st
 
     table(rows_gender, "Розбіжності в роді й числі", "Слова з тією самою основою, але різним закінченням минулого часу (ж — -ла, ч — -в, мн — -ли). Кандидати: частина з них — різні дієслова з однаковою основою або різна побудова фрази.")
     table(rows_form, "Розбіжності ти / ви", "У нашому перекладі і в еталоні різні займенники звертання.")
+
+    out += ["## Інші ознаки (лише наш переклад)", "", "| Ознака | Значення | Приклади |", "|---|---|---|"]
+    for name, value, examples in extra_metrics(en, ours):
+        out.append(f"| {name} | {value} | {'; '.join(examples).replace('|', '/')} |")
+    out.append("")
 
     names_o, names_r = capitalized(ours), capitalized(ref)
     out += ["## Імена та слова з великої літери (не на початку речення)", "", "| Наш | к-сть | Еталон | к-сть |", "|---|---|---|---|"]

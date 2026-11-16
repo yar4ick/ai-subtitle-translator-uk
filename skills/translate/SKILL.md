@@ -16,7 +16,7 @@ Translate subtitles into Ukrainian. The user's request: $ARGUMENTS
    …the answer lines…
    AISUBS_END
    ```
-   The same for the glossary (`aisubs glossary <film.srt> - <<'AISUBS_END'`) and for fixes (`aisubs import <film.srt> - --fix --next <<'AISUBS_END'`). To correct an answer, send the whole corrected answer again the same way.
+   The same for the glossary (`aisubs glossary <film.srt> - --next <<'AISUBS_END'`) and for fixes (`aisubs import <film.srt> - --fix --next <<'AISUBS_END'`). To correct an answer, send the whole corrected answer again the same way.
    Run every `aisubs` command on its own, starting with `python3 ${CLAUDE_PLUGIN_ROOT}/aisubs`: no `mkdir`, shell variables, `;` or `&&` around it, or the user is asked for permission. The tool creates its folders itself.
    Take into account the user's wishes from the request above (for example `--wikipedia`, or to stop and check the glossary with them first).
 4. At the end, tell the user in their language where the translated .srt and the review file are, and summarise the checks.
