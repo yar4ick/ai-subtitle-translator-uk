@@ -39,7 +39,7 @@ def render(project, problems: list[Problem], film: str) -> tuple[str, int]:
     scene_of = {i: n for n, (a, b) in enumerate(scenes) for i in range(a, b)}
 
     for k, chunk in enumerate(project.chunks):
-        keys = exchange.chunk_keys(project.items, chunk)
+        keys = project.chunk_keys(k)
         wanted = [n for n, (key, _, _) in enumerate(keys) if (k, key) in marks]
         if not wanted:
             continue

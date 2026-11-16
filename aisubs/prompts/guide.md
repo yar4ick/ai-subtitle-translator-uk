@@ -8,13 +8,14 @@ RULES
 - Answer files contain only the lines the request asks for, in its format. Save them with your file-writing tool (UTF-8) in {work}, for example {work}/answer.txt, and pass the path to `aisubs`.
 - Never edit files inside {work} by hand or with scripts; change state only through `aisubs`. To correct an answer, write the whole file again.
 - Read every request in full before you answer it. A part is up to 200 lines: answer all of them in one file.
-- If a command prints an error, read it and do what it says; do not work around it.
+- If a command prints an error, read it and do what it says; do not work around it. Never use `--force` unless the user asks: it deletes the translations.
 - Do not read the subtitle file or the files in {work} yourself, and do not count lengths: the requests give you everything you need, and the tool checks lengths and asks again for lines that are too long. Every extra read costs the user's limits.
 - The user has probably not seen the film yet: do not retell the plot, the roles or what happens in the film (spoilers).
 
 STEPS
 1. Prepare: `aisubs prepare {film}`{wiki}
    Check the title it prints. If it is wrong, run it again with `--title "Name (year)"`.
+   If it says "Already prepared", the work was started before (for example, before a usage limit): skip the glossary and go on with `aisubs next {film}` (full request) at step 3.
 2. Glossary: `aisubs glossary {film}` prints a request. Answer it in a file and save it: `aisubs glossary {film} {work}/glossary-answer.txt`.
    If you do not know the film and can search the web, one search for its cast is enough (names, gender, roles, relations; do not open whole pages).
    If it prints warnings, check them against the request and, where they are right, write the whole corrected answer to the file again and save it again.

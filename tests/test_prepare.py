@@ -56,6 +56,28 @@ class CleanCueTest(unittest.TestCase):
         self.assertEqual(texts(it), ["Where are you?"])
         self.assertEqual(it.parts[0].speaker, "Sophie")
 
+    def test_speaker_label_forms(self):
+        it = item("MAN [on radio]: Copy that.")
+        self.assertEqual((texts(it), it.parts[0].speaker), (["Copy that."], "Man"))
+        it = item("Man: Where are you?")
+        self.assertEqual((texts(it), it.parts[0].speaker), (["Where are you?"], "Man"))
+        it = item("Woman #2: Over here!")
+        self.assertEqual((texts(it), it.parts[0].speaker), (["Over here!"], "Woman #2"))
+        it = item("Look: I told you.")  # not a role
+        self.assertEqual((texts(it), it.parts[0].speaker), (["Look: I told you."], ""))
+
+    def test_a_file_in_capitals_has_no_labels_but_roles(self):
+        it = prepare.clean_cue(srt.Cue(0, 1000, "I TOLD YOU: GET OUT"), capitals=True)
+        self.assertEqual((texts(it), it.parts[0].speaker), (["I TOLD YOU: GET OUT"], ""))
+        cues = [srt.Cue(n * 2000, n * 2000 + 1000, t) for n, t in enumerate(["WHERE ARE YOU?"] * 12 + ["I TOLD YOU: GET OUT"] + ["OK."] * 5)]
+        items, _ = prepare.make_items(cues)
+        self.assertEqual(texts(items[12]), ["I TOLD YOU: GET OUT"])
+
+    def test_web_address_in_the_film_is_kept(self):
+        self.assertIsNotNone(prepare.clean_cue(srt.Cue(0, 1000, "Go to www.arasaka.com and log in."), edge=False))
+        self.assertIsNone(prepare.clean_cue(srt.Cue(0, 1000, "Go to www.arasaka.com and log in."), edge=True))
+        self.assertIsNone(prepare.clean_cue(srt.Cue(0, 1000, "Subtitles by someone"), edge=False))
+
     def test_sdh_only_cue_is_dropped(self):
         self.assertIsNone(item("[door slams]"))
         self.assertIsNone(item("<i>(phone ringing)</i>"))

@@ -49,6 +49,12 @@ class CheckerTest(unittest.TestCase):
     def test_gender(self):
         self.assertEqual(self.problems("I forgot.", "Я забув.", "С>Л"), ["gender: «я забув», but S is ж"])
 
+    def test_plural_nouns_in_iv_are_not_verbs(self):
+        self.assertEqual(self.problems("I'll call the cops.", "Я покличу копів.", "С>Л"), [])
+        self.assertEqual(self.problems("I'm afraid of these dogs.", "Я боюся цих псів.", "С>Л"), [])
+        self.assertEqual(self.problems("I wanted it.", "Я хотів цього.", "С>Л"), ["gender: «я хотів», but S is ж"])
+        self.assertEqual(self.problems("I really wanted it.", "Я так хотів цього.", "С>Л"), ["gender: «я хотів», but S is ж"])
+
     def test_misspelled_name_only_when_the_source_has_it(self):
         self.assertEqual(self.problems("Stansfield!", "Стенсфільд!"), ["name spelled «Стенсфільд», glossary: «Стенсфілд»"])
         self.assertEqual(self.problems("Bonnie and Clyde.", "Бонні й Клайд."), [])

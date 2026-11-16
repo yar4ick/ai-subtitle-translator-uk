@@ -102,9 +102,40 @@ class EndToEndTest(unittest.TestCase):
         self.assertIn("TRANSLATE (part 2 of", out)
         self.assertNotIn("Translate film subtitles", out)
         _, request = run("next", str(self.film))
-        code, out = run("import", str(self.film), "--next", stdin=fake_translate(request, drop="1"))
+        first = request.split("TRANSLATE (part 2 of")[1].splitlines()[1].split("|")[0]
+        self.assertNotEqual(first, "1")  # IDs run through the film
+        code, out = run("import", str(self.film), "--next", stdin=fake_translate(request, drop=first))
         self.assertEqual(code, 2)
         self.assertIn("TRANSLATE (part 2 of", out)
+
+    def test_an_answer_sent_twice_is_not_taken_for_the_next_part(self):
+        run("prepare", str(self.film), "--chunk-size", "2")
+        _, request = run("next", str(self.film))
+        answer = fake_translate(request)
+        run("import", str(self.film), stdin=answer)
+        code, out = run("import", str(self.film), "--next", stdin=answer)
+        self.assertEqual(code, 0, out)
+        self.assertIn("from part 1, which is already translated: nothing saved", out)
+        self.assertIn("TRANSLATE (part 2 of", out)
+        _, out = run("status", str(self.film))
+        self.assertRegex(out, r"part +2/\d+: todo")
+
+    def test_prepare_again_continues_instead_of_deleting(self):
+        run("prepare", str(self.film), "--chunk-size", "2")
+        _, request = run("next", str(self.film))
+        run("import", str(self.film), stdin=fake_translate(request))
+        code, out = run("prepare", str(self.film))
+        self.assertEqual(code, 0, out)
+        self.assertIn("Already prepared", out)
+        self.assertIn("(part 2 of", out)
+        _, out = run("status", str(self.film))
+        self.assertRegex(out, r"part +1/\d+: done")
+
+    def test_an_answer_for_another_unfinished_part_goes_there(self):
+        run("prepare", str(self.film), "--chunk-size", "2")
+        _, request = run("next", str(self.film), "--part", "2")
+        code, out = run("import", str(self.film), stdin=fake_translate(request))
+        self.assertRegex(out, r"part 2/\d+: accepted")
 
     def test_glossary_flow(self):
         run("prepare", str(self.film))
@@ -128,8 +159,10 @@ class EndToEndTest(unittest.TestCase):
         _, request = run("next", str(self.film))
         run("import", str(self.film), stdin=fake_translate(request))
         code, out = run("prepare", str(self.film))
-        self.assertEqual(code, 1)
-        self.assertIn("--force", out)
+        self.assertEqual(code, 0)
+        self.assertIn("All parts are translated", out.replace("all parts", "All parts"))
+        self.assertIn("--force", out)  # mentioned, but only for starting over
+        self.assertTrue(any((self.tmp / "Lighthouse.2021.en.aisubs" / "done").glob("*.json")))
 
     def test_changed_source_is_detected(self):
         run("prepare", str(self.film))

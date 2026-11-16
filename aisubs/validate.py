@@ -98,7 +98,7 @@ def run(project) -> tuple[list[Problem], dict]:
     for k, chunk in enumerate(project.chunks):
         have = done.get(k, {})
         by_item: dict[int, list[tuple[str, int]]] = {}
-        for key, i, p in exchange.chunk_keys(project.items, chunk):
+        for key, i, p in project.chunk_keys(k):
             if key in have:
                 by_item.setdefault(i, []).append((key, p))
         for i, parts in by_item.items():
@@ -136,7 +136,7 @@ def run(project) -> tuple[list[Problem], dict]:
 def fix_request(project, k: int, problems: list[Problem], *, brief: bool, instructions: str = "") -> str:
     """Ask the model again for the lines of part k that have `fix` problems."""
     speakers = project.speakers().get(k, {})
-    keyed = {key: (i, p) for key, i, p in exchange.chunk_keys(project.items, project.chunks[k])}
+    keyed = {key: (i, p) for key, i, p in project.chunk_keys(k)}
     wanted: dict[str, list[str]] = {}
     for pr in problems:
         if pr.k == k and pr.fix:

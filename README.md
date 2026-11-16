@@ -40,6 +40,8 @@
 
 Агент пройде всі кроки сам і не питатиме дозволів: виклики `aisubs` плагін дозволяє наперед. Рекомендована модель — Sonnet.
 
+Якщо роботу перервано (скінчився ліміт, закрилася сесія), просто повторіть ту саму команду: агент продовжить з місця зупинки, перекладені частини не пропадуть.
+
 ## Antigravity CLI, Codex CLI та інші агенти
 
 Запустіть агента в папці з субтитрами й напишіть:
@@ -64,10 +66,11 @@ python3 aisubs next film.srt                # вставте запит у ча�
 python3 aisubs import film.srt answer.txt   # повторюйте next/import, доки всі частини не будуть перекладені
 python3 aisubs fix film.srt                 # якщо перевірки знайшли помилки: запит на виправлення
 python3 aisubs import film.srt fix.txt --fix
+python3 aisubs review film.srt               # сумнівні місця: виправте film.aisubs/review.txt, потім --apply
 python3 aisubs assemble film.srt
 ```
 
-Якщо `aisubs` встановлено (`pip install git+https://github.com/yar4ick/ai-subtitle-translator-uk`), замість `python3 aisubs` пишіть просто `aisubs`.
+Команди тут виконуються з папки репозиторію; якщо фільм лежить деінде, вкажіть повний шлях до нього. Якщо `aisubs` встановлено (`pip install git+https://github.com/yar4ick/ai-subtitle-translator-uk`), замість `python3 aisubs` пишіть просто `aisubs`.
 
 ## Що вийде
 
@@ -130,6 +133,8 @@ You can add wishes after the file name, for example:
 
 The agent runs all steps itself without permission prompts: the plugin pre-approves `aisubs` calls. Sonnet is the recommended model.
 
+If the work is interrupted (a usage limit, a closed session), run the same command again: the agent continues where it stopped and keeps the translated parts.
+
 ## Antigravity CLI, Codex CLI and other agents
 
 Start the agent in the folder with the subtitles and write:
@@ -154,10 +159,11 @@ python3 aisubs next film.srt                # paste the request into the chat, s
 python3 aisubs import film.srt answer.txt   # repeat next/import until all parts are translated
 python3 aisubs fix film.srt                 # if the checks found problems: a request to fix them
 python3 aisubs import film.srt fix.txt --fix
+python3 aisubs review film.srt               # doubtful places: fix film.aisubs/review.txt, then --apply
 python3 aisubs assemble film.srt
 ```
 
-With `aisubs` installed (`pip install git+https://github.com/yar4ick/ai-subtitle-translator-uk`), use `aisubs` instead of `python3 aisubs`.
+Run these from the repository folder and give the full path to the film if it is elsewhere. With `aisubs` installed (`pip install git+https://github.com/yar4ick/ai-subtitle-translator-uk`), use `aisubs` instead of `python3 aisubs`.
 
 ## Output
 

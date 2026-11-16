@@ -22,13 +22,19 @@ _ECHOED_BUDGET_RE = re.compile(r"^≤\d+\|\s?")
 _SPEAKERS_RE = re.compile(r"^(?:([^\s|>]{1,4})\s*>\s*([^\s|>]{1,4})|([-*?]))\s*\|\s?")
 
 
-def chunk_keys(items: list[Item], chunk: tuple[int, int]) -> list[tuple[str, int, int]]:
+def first_id(items: list[Item], chunk: tuple[int, int]) -> int:
+    """The number of the first line of a chunk: lines are numbered through the whole film."""
+    return 1 + sum(1 for i in range(chunk[0]) if not items[i].skip)
+
+
+def chunk_keys(items: list[Item], chunk: tuple[int, int], start: int = 1) -> list[tuple[str, int, int]]:
     """Return [(key, item index, part index)] for the translatable parts of a chunk.
 
-    Keys are numbered from 1 within the chunk without gaps; dialogue parts get a, b, c….
+    Keys are numbered from `start` without gaps; dialogue parts get a, b, c…. Numbering
+    through the film (start = first_id) means an answer can never land in the wrong part.
     """
     keys = []
-    n = 0
+    n = start - 1
     for i in range(*chunk):
         if items[i].skip:
             continue
@@ -54,6 +60,7 @@ def build_request(
     glossary_block: str = "",
     scene_starts: frozenset[int] = frozenset(),
     speaker_codes: dict[str, str] | None = None,
+    starts: list[int] | None = None,
 ) -> str:
     """Request text for chunk `k` (0-based), asking only for keys not in done[k].
 
@@ -64,13 +71,14 @@ def build_request(
     given as `S=code`, with the code from `speaker_codes` (name -> code)
     or the name itself.
     """
+    starts = starts or [1] * len(chunks)
     out = [] if brief else [instructions(title), ""]
     if glossary_block and not brief:
         out += ["GLOSSARY", glossary_block, ""]
 
     prev = done.get(k - 1, {})
     if k > 0 and prev and not brief:
-        pairs = [(items[i].parts[p].text, prev[key]) for key, i, p in chunk_keys(items, chunks[k - 1]) if key in prev]
+        pairs = [(items[i].parts[p].text, prev[key]) for key, i, p in chunk_keys(items, chunks[k - 1], starts[k - 1]) if key in prev]
         if pairs:
             out.append("CONTEXT (previous lines, already translated):")
             out += [f"{src} => {uk}" for src, uk in pairs[-CONTEXT_BEFORE:]]
@@ -80,7 +88,7 @@ def build_request(
     codes = speaker_codes or {}
     out.append(f"TRANSLATE (part {k + 1} of {len(chunks)}):")
     last = None
-    for key, i, p in chunk_keys(items, chunks[k]):
+    for key, i, p in chunk_keys(items, chunks[k], starts[k]):
         if key in have:
             continue
         if last is not None and i != last and any(j in scene_starts for j in range(last + 1, i + 1)):
@@ -96,7 +104,7 @@ def build_request(
         out.append("|".join(fields + [part.text]))
 
     if k + 1 < len(chunks):
-        following = [items[i].parts[p].text for _, i, p in chunk_keys(items, chunks[k + 1])][:CONTEXT_AFTER]
+        following = [items[i].parts[p].text for _, i, p in chunk_keys(items, chunks[k + 1], starts[k + 1])][:CONTEXT_AFTER]
         if following:
             out += ["", "CONTEXT (following lines, do not translate):"]
             out += following
