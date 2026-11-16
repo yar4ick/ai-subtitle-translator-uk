@@ -14,10 +14,12 @@ from . import srt
 
 # Lines like these are ads or credits of the subtitle file, not of the film
 _AD_RE = re.compile(
-    r"opensubtitles|subscene|addic7ed|podnapisi|yts\.|yify|www\.|https?://|\.(com|org|net)\b"
+    r"opensubtitles|subscene|addic7ed|podnapisi|yts\.|yify"
     r"|subtitles? (by|ripped|downloaded|synced|corrected)|\b(sync|synced|corrected|ripped|encoded)\s+(and\s+\w+\s+)?by\b",
     re.IGNORECASE,
 )
+# A web address is an ad only among the first or last cues: in the film it can be a line ("Go to www.…")
+_WEB_RE = re.compile(r"www\.|https?://|\.(com|org|net)\b", re.IGNORECASE)
 # Release tags of the subtitle file: "Film (1994) ….HI1", "720p.BluRay.x264"
 _RELEASE_RE = re.compile(
     r"(?:^|[\s._-])(?:HI\d|SDH|CC|\d{3,4}p|Blu-?Ray|BRRip|BDRip|WEB-?DL|WEBRip|HDTV|DVDRip|x26[45]|HEVC)(?:$|[\s._-])"
@@ -29,8 +31,14 @@ _OVERRIDE_RE = re.compile(r"\{\\[^}]*\}")
 _TAG_RE = re.compile(r"</?(?:font|b|u|s)\b[^>]*>", re.IGNORECASE)
 _ITALIC_RE = re.compile(r"(</?i>)", re.IGNORECASE)
 _DASH_RE = re.compile(r"^[-–—]\s*")
-# SDH: "SOPHIE:" / "MAN #2:" / "(ETHAN):" at the start of a line
-_SPEAKER_RE = re.compile(r"^[(\[]?([A-Z][A-Z0-9 .'#&-]*[A-Z0-9])[)\]]?:\s*")
+# SDH: "SOPHIE:" / "MAN #2:" / "(ETHAN):" / "MAN [on radio]:" at the start of a line
+_SPEAKER_RE = re.compile(r"^[(\[]?([A-Z][A-Z0-9 .'#&-]*[A-Z0-9])[)\]]?(?:\s*[\[(][^\])]*[\])])?:\s*")
+# The same with usual capitals, only for generic roles: "Man:", "Woman #2:", "Old man [on TV]:"
+_ROLE_RE = re.compile(
+    r"^((?:Old |Young |Little )?(?:Man|Woman|Boy|Girl|Kid|Child|Narrator|Announcer|Reporter|Newscaster|Officer|Guard"
+    r"|Soldier|Doctor|Nurse|Teacher|Driver|Pilot|Voice|Crowd|All|Both|Men|Women|Kids)(?: #?\d+)?)"
+    r"(?:\s*[\[(][^\])]*[\])])?:\s*"
+)
 _SOUND_RE = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 _LETTER_RE = re.compile(r"[^\W\d_]")
 
@@ -85,8 +93,12 @@ def _norm_space(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def clean_cue(cue: srt.Cue, keep_sdh: bool = False) -> Item | None:
-    """Return the cue as an Item, or None if it should be dropped entirely."""
+def clean_cue(cue: srt.Cue, keep_sdh: bool = False, *, edge: bool = True, capitals: bool = False) -> Item | None:
+    """Return the cue as an Item, or None if it should be dropped entirely.
+
+    `edge`: the cue is among the first or last ones, where web addresses are ads.
+    `capitals`: the whole file is in capital letters, so "WORDS:" are not speaker labels.
+    """
     text = html.unescape(cue.text)
     pos = ""
     if m := _POS_RE.match(text):
@@ -94,7 +106,7 @@ def clean_cue(cue: srt.Cue, keep_sdh: bool = False) -> Item | None:
     text = _TAG_RE.sub("", _OVERRIDE_RE.sub("", text))
     if not text.strip():
         return None
-    if _AD_RE.search(text):
+    if _AD_RE.search(text) or (edge and _WEB_RE.search(text)):
         return None
 
     # A dash at a line start begins a new speaker; other lines continue the current one.
@@ -115,10 +127,12 @@ def clean_cue(cue: srt.Cue, keep_sdh: bool = False) -> Item | None:
     for segments in groups:
         speaker = ""
         plain = "".join(s for s, _ in segments).lstrip()
-        if m := _SPEAKER_RE.match(plain):
-            speaker = m.group(1).title()
-            if not keep_sdh:
-                segments = _strip_prefix(segments, _SPEAKER_RE)
+        for pattern in ((_ROLE_RE,) if capitals else (_SPEAKER_RE, _ROLE_RE)):
+            if m := pattern.match(plain):
+                speaker = m.group(1).title()
+                if not keep_sdh:
+                    segments = _strip_prefix(segments, pattern)
+                break
         if not keep_sdh:
             segments = [(_SOUND_RE.sub("", s), i) for s, i in segments]
         rendered, italic = _render(segments)
@@ -155,10 +169,12 @@ def _is_banner(text: str) -> bool:
 
 def make_items(cues: list[srt.Cue], keep_sdh: bool = False) -> tuple[list[Item], int]:
     """Return (items, number of dropped cues)."""
-    items = [
-        None if (n < EDGE or n >= len(cues) - EDGE) and _is_banner(c.text) else clean_cue(c, keep_sdh)
-        for n, c in enumerate(cues)
-    ]
+    letters = [c for c in cues if _LETTER_RE.search(c.text)]
+    capitals = len(letters) > 10 and sum(c.text.upper() == c.text for c in letters) > 0.8 * len(letters)
+    items = []
+    for n, c in enumerate(cues):
+        edge = n < EDGE or n >= len(cues) - EDGE
+        items.append(None if edge and _is_banner(c.text) else clean_cue(c, keep_sdh, edge=edge, capitals=capitals))
     kept = [i for i in items if i is not None]
     return kept, len(items) - len(kept)
 

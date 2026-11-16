@@ -2,7 +2,7 @@
 name: translate
 description: Translate SRT subtitles (a film or an episode) from English into Ukrainian with the aisubs tool, which handles parsing, glossary, checks and assembling. Use when the user asks to translate subtitles or an .srt file into Ukrainian.
 argument-hint: "<film.srt> [wishes, e.g. --wikipedia, check the glossary with me first]"
-allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/aisubs *), Bash(python ${CLAUDE_PLUGIN_ROOT}/aisubs *), Read, Write
+allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/aisubs *), Bash(python ${CLAUDE_PLUGIN_ROOT}/aisubs *)
 ---
 
 Translate subtitles into Ukrainian. The user's request: $ARGUMENTS

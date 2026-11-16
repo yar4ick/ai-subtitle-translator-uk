@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import candidates, exchange, glossary, prepare, srt, wiki
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # 2: line IDs run through the whole film; 1: from 1 in every part
 
 
 class ProjectError(Exception):
@@ -91,6 +91,9 @@ class Project:
 
     # --- prepare ---
 
+    def has_translations(self) -> bool:
+        return self.dir.exists() and any(self.done_dir.glob("*.json"))
+
     def create(self, *, title: str | None, keep_sdh: bool, chunk_size: int, scene_gap: int, encoding: str | None, force: bool) -> srt.SrtFile:
         if self.dir.exists() and any(self.done_dir.glob("*.json")) and not force:
             raise ProjectError(f"{self.dir} already has translations; use --force to start over (they will be deleted)")
@@ -138,7 +141,7 @@ class Project:
         if not meta_path.exists():
             raise ProjectError(f"not prepared yet; run: aisubs prepare {self.film}")
         self.meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        if self.meta.get("format") != FORMAT_VERSION:
+        if self.meta.get("format") not in (1, FORMAT_VERSION):
             raise ProjectError(f"{self.dir} was made by another version of aisubs; run prepare --force")
         if self.film.exists() and _sha256(self.film) != self.meta["sha256"]:
             raise ProjectError(f"{self.film} changed since prepare; run: aisubs prepare --force {self.film}")
@@ -210,8 +213,23 @@ class Project:
                 out[k] = json.loads(path.read_text(encoding="utf-8")).get("retries", {})
         return out
 
+    def starts(self) -> list[int]:
+        """The ID of the first line of every part."""
+        if self.meta.get("format", 1) == 1:
+            return [1] * len(self.chunks)
+        return [exchange.first_id(self.items, c) for c in self.chunks]
+
+    def chunk_keys(self, k: int) -> list[tuple[str, int, int]]:
+        return exchange.chunk_keys(self.items, self.chunks[k], self.starts()[k])
+
     def keys(self, k: int) -> list[str]:
-        return [key for key, _, _ in exchange.chunk_keys(self.items, self.chunks[k])]
+        return [key for key, _, _ in self.chunk_keys(k)]
+
+    def part_of(self, keys) -> int | None:
+        """The part most of these line IDs belong to, or None."""
+        wanted = set(keys)
+        best = max(range(len(self.chunks)), key=lambda k: len(wanted & set(self.keys(k))), default=None)
+        return best if best is not None and wanted & set(self.keys(best)) else None
 
     def is_complete(self, k: int, done: dict[int, dict[str, str]] | None = None) -> bool:
         have = (done if done is not None else self.done()).get(k, {})

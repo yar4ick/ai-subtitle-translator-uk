@@ -32,6 +32,15 @@ class GuideTest(unittest.TestCase):
             self.assertTrue(any(option in {o for a in c._actions for o in a.option_strings} for c in commands.values()), option)
 
 
+class QuoteTest(unittest.TestCase):
+    def test_unusual_file_names_are_quoted(self):
+        self.assertEqual(guide._quote("film.srt"), "film.srt")
+        self.assertEqual(guide._quote("Leon(1994).srt"), '"Leon(1994).srt"')
+        self.assertEqual(guide._quote("It's.a.Wonderful.Life.srt"), '"It\'s.a.Wonderful.Life.srt"')
+        self.assertEqual(guide._quote("Tom&Jerry.srt"), '"Tom&Jerry.srt"')
+        self.assertEqual(guide._quote('a "b".srt'), "'a \"b\".srt'")
+
+
 class PluginTest(unittest.TestCase):
     def test_manifests(self):
         plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))

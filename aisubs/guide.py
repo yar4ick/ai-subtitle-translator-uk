@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -12,7 +13,10 @@ PROMPTS = Path(__file__).parent / "prompts"
 
 
 def _quote(path: str) -> str:
-    return f'"{path}"' if " " in path else path
+    """Quote a path for a shell command when it needs it: spaces, brackets, ', &…"""
+    if re.fullmatch(r"[\w./:@%+=,-]+", path):
+        return path
+    return f'"{path}"' if '"' not in path and "$" not in path and "`" not in path else shlex.quote(path)
 
 
 def command() -> str:

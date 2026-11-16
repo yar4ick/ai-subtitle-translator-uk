@@ -18,6 +18,17 @@ def cmd_guide(args) -> int:
 
 def cmd_prepare(args) -> int:
     project = Project(args.film)
+    if not args.force and project.has_translations():
+        # A restarted agent begins with step 1 again: never offer to delete the work done
+        project.load()
+        pending = project.pending_chunk()
+        print(f"Already prepared: {project.dir} has translations. Continue where it stopped:")
+        if pending is None:
+            print(f"all parts are translated; next: aisubs validate {args.film}, then aisubs assemble {args.film}")
+        else:
+            print(f"aisubs next {args.film}  (part {pending + 1} of {len(project.chunks)})")
+        print("To start over and delete the translations (only if the user asks): add --force")
+        return 0
     parsed = project.create(
         title=args.title,
         keep_sdh=args.keep_sdh,
@@ -55,6 +66,7 @@ def _request(project: Project, k: int, brief: bool) -> str:
         project.items, project.chunks, k, project.done(), project.meta["title"],
         brief=brief, glossary_block="" if g.is_empty() else glossary.render(g),
         scene_starts=frozenset(a for a, _ in scenes[1:]), speaker_codes=glossary.speaker_codes(g),
+        starts=project.starts(),
     )
 
 
@@ -191,6 +203,20 @@ def cmd_import(args) -> int:
     else:
         text = Path(args.answer).read_text(encoding="utf-8-sig")
     answer, ignored = exchange.parse_answer(text)
+    if not args.fix and args.part is None and answer:
+        # Line IDs run through the film, so the answer itself says which part it is
+        own = project.part_of(answer)
+        if own is not None and own != k:
+            if project.is_complete(own):
+                print(f"These lines are from part {own + 1}, which is already translated: nothing saved "
+                      f"(an answer sent twice?). To replace that part: aisubs import {args.film} FILE --part {own + 1}")
+                if args.next:
+                    print()
+                    sys.stdout.write(_request(project, k, True))
+                else:
+                    print(f"Next: aisubs next {args.film}")
+                return 0
+            k = own
     if args.fix:
         wanted = {p.key for p in problems if p.k == k and p.fix}
         answer = {key: v for key, v in answer.items() if key in wanted}
@@ -303,7 +329,7 @@ def cmd_assemble(args) -> int:
     done = project.done()
     texts: dict[int, list[str | None]] = {i: [None] * len(item.parts) for i, item in enumerate(project.items)}
     for k, chunk in enumerate(project.chunks):
-        for key, i, p in exchange.chunk_keys(project.items, chunk):
+        for key, i, p in project.chunk_keys(k):
             texts[i][p] = done.get(k, {}).get(key)
     missing = sum(1 for i, item in enumerate(project.items) if not item.skip and None in texts[i])
     if missing and not args.partial:

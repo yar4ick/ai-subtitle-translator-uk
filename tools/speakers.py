@@ -111,7 +111,7 @@ def score(film: Path, labels_path: Path) -> str:
     cue_no = {(c.start, c.end): n for n, c in enumerate(srt.read(film).cues, 1)}
     where: dict[int, list[tuple[int, str]]] = {}
     for k, chunk in enumerate(project.chunks):
-        for key, i, p in exchange.chunk_keys(project.items, chunk):
+        for key, i, p in project.chunk_keys(k):
             n = cue_no.get((project.items[i].start, project.items[i].end))
             if n:
                 where.setdefault(n, []).append((k, key))

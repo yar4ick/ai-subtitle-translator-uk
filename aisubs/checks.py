@@ -20,6 +20,9 @@ _GENDERS = {"ч": "ч", "ж": "ж"}
 WINDOW = 3  # past-tense words this close to «я» / «ти» are taken as its verbs
 # Look like masculine past tense but are not verbs
 _NOT_VERBS = set("знов любов кров морков років друзів хлопців батьків грошей слів часів разів днів тижнів доларів братів".split())
+# «-ів» is as often a plural noun (копів, псів) as a verb (хотів, сидів): such a word counts
+# only right next to «я» / «ти», with nothing but these words between them
+_PARTICLES = set("не ж же вже би б теж також ще аж навіть просто так дуже завжди ніколи справді тоді тут там й і".split())
 
 
 def past_gender(word: str) -> str:
@@ -60,8 +63,15 @@ def gender_conflicts(text: str, speakers: str, cast: dict[str, str]) -> list[str
             person = "я" if word in _FIRST else "ти" if word in _SECOND else ""
             if not person or not want[person]:
                 continue
-            near = words[max(0, k - WINDOW): k] + words[k + 1: k + 1 + WINDOW]
-            forms = [(w, past_gender(w)) for w in near if past_gender(w)]
+            forms = []
+            for j in range(max(0, k - WINDOW), min(len(words), k + 1 + WINDOW)):
+                w = words[j]
+                if j == k or not past_gender(w):
+                    continue
+                between = words[min(j, k) + 1: max(j, k)]
+                if w.endswith(("ів", "їв")) and any(b not in _PARTICLES for b in between):
+                    continue
+                forms.append((w, past_gender(w)))
             # Only when no nearby form has the right gender ("я не бачила тебе багато років" is fine)
             if forms and all(g != want[person] for _, g in forms):
                 role = "S" if person == "я" else "A"
