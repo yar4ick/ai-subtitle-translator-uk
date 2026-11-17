@@ -15,6 +15,16 @@ from .validate import Problem
 
 AROUND = 4  # lines of the scene shown before and after a doubtful line
 _LINE_RE = re.compile(r"^(\d+):(\d+[a-z]?)\|(.*)$")
+_STATE_RE = re.compile(r"^# state: (\w+)", re.M)
+
+
+class Stale(Exception):
+    """The review file was written before the translation changed."""
+
+
+def is_stale(project, text: str) -> bool:
+    m = _STATE_RE.search(text)
+    return bool(m) and m.group(1) != project.state()
 
 
 def render(project, problems: list[Problem], film: str) -> tuple[str, int]:
@@ -30,6 +40,7 @@ def render(project, problems: list[Problem], film: str) -> tuple[str, int]:
         "# (S>A) between the | marks. `?` after a code means the AI was unsure who speaks: delete it",
         "# when the code is right. Lines you do not touch stay as they are. Then run:",
         f"#   aisubs review {film} --apply",
+        f"# state: {project.state()} (do not edit this line)",
     ]
     if codes:
         out.append(f"# Codes: {codes}; ч/ж someone not in the cast, x unknown, * a group, - narration")
@@ -73,7 +84,12 @@ def render(project, problems: list[Problem], film: str) -> tuple[str, int]:
 
 
 def apply(project, text: str, *, dry_run: bool = False) -> tuple[list[tuple[int, str]], list[str]]:
-    """Save the edited lines. Return ([(part, key)] changed, problems with the file)."""
+    """Save the edited lines. Return ([(part, key)] changed, problems with the file).
+
+    A file written before the translation changed would bring old lines back: it raises Stale.
+    """
+    if is_stale(project, text):
+        raise Stale()
     done, speakers = project.done(), project.speakers()
     edits: dict[int, dict] = {}
     errors = []

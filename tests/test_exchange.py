@@ -44,7 +44,7 @@ class RequestTest(unittest.TestCase):
     def test_context_and_missing_only(self):
         done = {0: {"1": "Один", "2": "Два"}, 1: {"1": "Три"}}
         text = exchange.build_request(self.items, self.chunks, 1, done, "F")
-        self.assertIn("CONTEXT (previous lines, already translated):\nOne => Один\nTwo => Два\n", text)
+        self.assertIn("CONTEXT (previous lines, already translated; who speaks to whom):\nOne => Один\nTwo => Два\n", text)
         self.assertIn("TRANSLATE (part 2 of 3):\n2|Four\n", text)
         self.assertNotIn("1|Three", text)
 

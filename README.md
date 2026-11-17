@@ -11,7 +11,7 @@
 - повертає моделі лише рядки з помилками, а сумнівні місця збирає у файл для перегляду людиною;
 - збирає готовий `film.uk.srt` з оригінальними таймінгами.
 
-Модель отримує лише текст рядків без таймінгів і відповідає коротким форматом, тож токенів іде мало. 25-хвилинна серія (290 субтитрів) у Claude Code із Sonnet коштує близько $0.5 за цінами API і займає 4–5 хвилин.
+Модель отримує лише текст рядків без таймінгів і відповідає коротким форматом, тож токенів іде мало. У Claude Code із Sonnet (за цінами API): 25-хвилинна серія (290 субтитрів) — близько $0.6 і 5 хвилин, повнометражний фільм (1460 субтитрів) — близько $1.5–2 і 11 хвилин.
 
 ## Що потрібно
 
@@ -104,7 +104,7 @@ The model does the translation; a small tool, `aisubs` (Python, no dependencies)
 - sends only the failing lines back to the model and collects doubtful places in a file for a person to review;
 - assembles `film.uk.srt` with the original timings.
 
-The model gets only the line text, without timings, and answers in a compact format, so token use is low. A 25-minute episode (290 subtitles) in Claude Code with Sonnet costs about $0.5 at API prices and takes 4–5 minutes.
+The model gets only the line text, without timings, and answers in a compact format, so token use is low. In Claude Code with Sonnet (at API prices): a 25-minute episode (290 subtitles) costs about $0.6 and takes 5 minutes, a feature film (1460 subtitles) about $1.5–2 and 11 minutes.
 
 ## Requirements
 

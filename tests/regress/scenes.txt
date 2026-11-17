@@ -8,10 +8,13 @@ PLOT|Детектив Рей розслідує пограбування в мі
 C|Р|Ray Walker|Рей Вокер|ч|детектив, батько Емми, 50 років|втомлений, сухий гумор
 C|Е|Emma Walker|Емма Вокер|ж|донька Рея, 17 років|зухвала, дотепна
 C|Т|Tom|Том|ч|напарник Рея|балакучий
+C|Л|Lisa|Ліза|ж|дружина Тома|спокійна
 P|Е|Р|ти
 P|Р|Е|ти
 P|Р|Т|ти
 P|Т|Р|ти
+P|Л|Т|ти
+P|Т|Л|ти
 T|Riverside|Ріверсайд
 
 =
@@ -38,3 +41,19 @@ T|Riverside|Ріверсайд
 19|The FBI wants the case.  ## forbid=FBI
 =
 20|♪ Running down the river, running down the line ♪  ## forbid=Running
+=
+21|Tom, babe, did you eat anything today?  ## S=Л A=Т forbid=кохана,люба$,мила$
+22|Are you sure about this, Dad?  ## S=Е A=Р forbid=впевнена,певна
+23|Emma, did you take my keys?  ## S=Р A=Е past=ж
+24|Of course not.  ## S=Е A=Р require=ні/не
+=
+25|Emma, did you call the school?  ## S=Р A=Е past=ж
+26|I did. Twice.  ## S=Е A=Р past=ж
+27|And nobody called me back, Dad.  ## S=Е A=Р
+28|My shift ended at six. I was asleep.  ## S=Р A=Е require=спав/заснув/відсипався forbid=спала,заснула
+=
+29|I'll get him. Where are you, Tom?  ## A=Т
+30|And the one who called the lab  ## forbid=Том
+31|was Tom.  ## require=Том
+32|Put on "Let It Be", Lisa.  ## A=Л latin=ok forbid=нехай,хай$
+33|≤18|No, I really don't think that he did it.  ## require=не/ні

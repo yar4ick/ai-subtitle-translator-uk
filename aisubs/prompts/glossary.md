@@ -16,4 +16,5 @@ T|english|українською
 - A short name, nickname or surname may belong to a character you already have (Stan = Norman Stansfield): add it to that character's role, not as a new C line, unless the lines show two different people.
 - Gender: when it is a guess, write `ч?` or `ж?`. A character who names themselves ("names themselves" in CANDIDATES) belongs in CAST even if mentioned once.
 - If you are not sure of a term, prefer plain transliteration over a coined word.
+- A form of address used to both men and women gets both forms: `T|babe|кохана / коханий`.
 - Put `?` at the end of any line you are not sure of. Do not invent characters.

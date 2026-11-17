@@ -8,7 +8,7 @@ from pathlib import Path
 from . import limits
 from .prepare import Item
 
-PROMPT_VERSION = 6
+PROMPT_VERSION = 7
 PROMPTS = Path(__file__).parent / "prompts"
 CONTEXT_BEFORE = 5
 CONTEXT_AFTER = 3
@@ -61,6 +61,7 @@ def build_request(
     scene_starts: frozenset[int] = frozenset(),
     speaker_codes: dict[str, str] | None = None,
     starts: list[int] | None = None,
+    speakers: dict[int, dict[str, str]] | None = None,
 ) -> str:
     """Request text for chunk `k` (0-based), asking only for keys not in done[k].
 
@@ -78,10 +79,11 @@ def build_request(
 
     prev = done.get(k - 1, {})
     if k > 0 and prev and not brief:
-        pairs = [(items[i].parts[p].text, prev[key]) for key, i, p in chunk_keys(items, chunks[k - 1], starts[k - 1]) if key in prev]
+        who = (speakers or {}).get(k - 1, {})
+        pairs = [(who.get(key, ""), items[i].parts[p].text, prev[key]) for key, i, p in chunk_keys(items, chunks[k - 1], starts[k - 1]) if key in prev]
         if pairs:
-            out.append("CONTEXT (previous lines, already translated):")
-            out += [f"{src} => {uk}" for src, uk in pairs[-CONTEXT_BEFORE:]]
+            out.append("CONTEXT (previous lines, already translated; who speaks to whom):")
+            out += [f"{sa + ' ' if sa else ''}{src} => {uk}" for sa, src, uk in pairs[-CONTEXT_BEFORE:]]
             out.append("")
 
     have = done.get(k, {})

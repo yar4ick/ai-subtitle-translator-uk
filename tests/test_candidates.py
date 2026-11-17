@@ -31,8 +31,15 @@ class FindTest(unittest.TestCase):
     def test_characters_naming_themselves(self):
         found = {c.name: c.intro for c in candidates.find(items(
             "<i>Katsuo here. Heard about your mom.</i>", "I'm Lucy.", "Sign here.", "From here on out, we run.",
-            "It's Gloria. Call me back."))}
-        self.assertEqual(found, {"Katsuo": 1, "Lucy": 1, "Gloria": 1})
+            "It's Gloria. Call me back.", "Where is Lucy now?", "Thanks, Gloria."))}
+        self.assertEqual(found, {"Katsuo": 1, "Lucy": 1, "Gloria": 1})  # Lucy and Gloria are named elsewhere
+
+    def test_not_introductions(self):
+        # Capitalized words are still candidates as names (London), but not as characters naming themselves
+        found = {c.name for c in candidates.find(items(
+            "Not here.", "Nothing here.", "You here?", "It's Christmas.", "This is London.", "I'm Italian.",
+            "I'm Batman.", "Why here? Because.", "Katsuo here. Heard about your mom.")) if c.intro}
+        self.assertEqual(found, {"Katsuo"})
 
     def test_lowercase_forms_of_address_need_two_uses(self):
         self.assertNotIn("kid", names(items("Easy, kid.")))

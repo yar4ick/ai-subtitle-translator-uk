@@ -136,6 +136,27 @@ class FixFlowTest(unittest.TestCase):
         self.assertIn("part 3/3: accepted 1 lines", out)
         self.assertIn("Nothing to fix.", out)
 
+    def _two_problems(self):
+        run("glossary", str(self.film), "-", stdin="C|Л|Lena|Лена|ж|x|y\nC|Б|Bob|Боб|ч|x|y\n")
+        _, request = run("next", str(self.film))
+        answer = answer_all(request, lambda key, src: {"1": "Wait.", "2a": "Я шукав його."}.get(key, "Що?"))
+        run("import", str(self.film), stdin=answer)
+
+    def test_an_unanswered_fix_line_is_not_asked_forever(self):
+        self._two_problems()
+        code, out = run("import", str(self.film), "--fix", "--next", stdin="1|Л>Б|Чекай.\n")
+        self.assertIn("not answered (they go to review): 2a", out)
+        self.assertIn("Nothing to fix.", out)
+        _, out = run("validate", str(self.film))
+        self.assertIn("(after a retry)", out)
+
+    def test_swapping_speakers_instead_of_fixing_gender_goes_to_review(self):
+        self._two_problems()
+        code, out = run("import", str(self.film), "--fix", "--next", stdin="1|Л>Б|Чекай.\n2a|Б>Л|Я шукав його.\n9|Л>Б|Зайве.\n")
+        self.assertIn("not asked for (ignored): 9", out)
+        _, out = run("validate", str(self.film))
+        self.assertIn("the speaker was changed instead of the gender", out)
+
     def test_fix_and_next(self):
         _, request = run("next", str(self.film))
         run("import", str(self.film), stdin=answer_all(request, lambda key, src: "Wait." if key == "1" else "Що?"))
@@ -175,6 +196,19 @@ class ReviewTest(unittest.TestCase):
         self.assertIn("Names: Марта (ж)", self.glossary_out)
         self.assertNotIn("доглядачка", self.glossary_out)
         self.assertNotIn("маяку", self.glossary_out)
+
+    def test_a_review_file_from_an_older_translation_is_not_applied(self):
+        run("review", str(self.film))
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("# state: ", text)
+        run("import", str(self.film), "--part", "1", stdin="2a|М>Б|Ти прийшла?\n")  # the model translates it again
+        code, out = run("review", str(self.film))  # the old file has no edits of its own: replaced
+        self.assertEqual(code, 0, out)
+        self.path.write_text(text.replace("Ти прийшов?", "Ти прийшов, так?"), encoding="utf-8")  # edits in the OLD file
+        code, out = run("review", str(self.film), "--apply")
+        self.assertEqual(code, 1)
+        self.assertIn("written before the translation changed", out)
+        self.assertEqual(Project(self.film).load().done()[0]["2a"], "Ти прийшла?")
 
     def test_a_doubt_without_gender_in_the_line_is_not_for_review(self):
         film = self.film
