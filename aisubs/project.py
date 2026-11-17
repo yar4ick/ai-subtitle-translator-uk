@@ -96,7 +96,7 @@ class Project:
 
     def create(self, *, title: str | None, keep_sdh: bool, chunk_size: int, scene_gap: int, encoding: str | None, force: bool) -> srt.SrtFile:
         if self.dir.exists() and any(self.done_dir.glob("*.json")) and not force:
-            raise ProjectError(f"{self.dir} already has translations; use --force to start over (they will be deleted)")
+            raise ProjectError(f"{self.dir} already has translations; continue with: aisubs next {self.film}")
         parsed = srt.read(self.film, encoding)
         if not parsed.cues:
             raise ProjectError("no subtitles found in " + str(self.film))
@@ -214,6 +214,40 @@ class Project:
                 out[k] = json.loads(path.read_text(encoding="utf-8")).get("notes", [])
         return out
 
+    def mark(self, k: int, keys, *, retry: bool = False, field: str = "") -> None:
+        """Count a retry for lines the model was asked for but did not answer, or add them to a
+        list field of the part ("speaker_changed")."""
+        path = self._done_path(k)
+        if not keys or not path.exists():
+            return
+        record = json.loads(path.read_text(encoding="utf-8"))
+        for key in keys:
+            if retry:
+                record.setdefault("retries", {})
+                record["retries"][key] = record["retries"].get(key, 0) + 1
+            if field and key not in record.setdefault(field, []):
+                record[field].append(key)
+        _write_json(path, record)
+
+    def marked(self, field: str) -> dict[int, set[str]]:
+        out = {}
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                out[k] = set(json.loads(path.read_text(encoding="utf-8")).get(field, []))
+        return out
+
+    def state(self) -> str:
+        """A short fingerprint of all translations and speaker codes: a review file made
+        from another state is out of date."""
+        h = hashlib.sha256()
+        for k in range(len(self.chunks)):
+            path = self._done_path(k)
+            if path.exists():
+                r = json.loads(path.read_text(encoding="utf-8"))
+                h.update(json.dumps([r.get("items", {}), r.get("speakers", {})], ensure_ascii=False, sort_keys=True).encode())
+        return h.hexdigest()[:12]
+
     def retries(self) -> dict[int, dict[str, int]]:
         """Part -> {key: how many times the line was sent back by `fix`}."""
         out = {}
@@ -277,6 +311,8 @@ class Project:
                     record["reviewed"].append(key)
             elif key in record.get("reviewed", []):
                 record["reviewed"].remove(key)  # the AI translated it again
+            if not retry and key in record.get("speaker_changed", []):
+                record["speaker_changed"].remove(key)
             if retry:
                 record.setdefault("retries", {})
                 record["retries"][key] = record["retries"].get(key, 0) + 1

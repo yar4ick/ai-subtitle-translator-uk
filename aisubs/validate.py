@@ -46,6 +46,7 @@ def _stem(name: str) -> str:
 class Checker:
     def __init__(self, g: Glossary):
         self.cast = checks.genders(g)
+        self.pairs = {(p[0], p[1]): p[2].strip(" ?").lower() for p in g.pairs if p[2].strip(" ?").lower() in ("ти", "ви")}
         # Ukrainian name word -> English words of the same entry: «Стенсфілд» -> {norman, stansfield}
         self.origin: dict[str, set[str]] = {}
         for en, uk in [(row[1], row[2]) for row in g.cast] + [(row[0], row[1]) for row in g.terms]:
@@ -75,7 +76,8 @@ class Checker:
             left = sorted({w for w in _LATIN_WORD_RE.findall(plain) if w.lower() in self.english})
             if left:
                 out.append((True, "name left in English: " + ", ".join(f"{w} (glossary: {self.english[w.lower()]})" for w in left)))
-            latin = sorted({w for w in _LATIN_TOKEN_RE.findall(_ANY_TAG_RE.sub("", plain)) if w.lower() not in self.english and w.lower() not in self.latin_ok
+            unquoted = re.sub(r"«[^»]*»", "", _ANY_TAG_RE.sub("", plain))  # «Let It Be»: a title may stay as it is
+            latin = sorted({w for w in _LATIN_TOKEN_RE.findall(unquoted) if w.lower() not in self.english and w.lower() not in self.latin_ok
                             and not _ROMAN_RE.fullmatch(w)})
             if latin and _CYRILLIC_RE.search(plain):
                 out.append((True, "Latin letters left: " + ", ".join(latin) + " (transliterate or translate)"))
@@ -87,6 +89,16 @@ class Checker:
             out.append((True, f"too long: {len(limits.visible(text))} characters"))
         for problem in checks.gender_conflicts(text, speakers, self.cast) if speakers else []:
             out.append((True, "gender: " + problem))
+        for problem in checks.address_conflicts(text, speakers, self.cast) if speakers else []:
+            out.append((True, "form of address: " + problem))
+        if speakers:
+            s, _, a = speakers.partition(">")
+            form = checks.formality(text)
+            want = self.pairs.get((checks.base_code(s), checks.base_code(a)), "")
+            if form and want and form != want:
+                out.append((False, f"{form}, but PAIRS says {want} (an address to several people? then A is *)"))
+            if form == "ти" and a.strip() == "*":
+                out.append((False, "ти to a group (*): ви, or one person as A"))
         for word in _WORD_RE.findall(plain):
             if len(word) < 4 or any(word.startswith(s) for s in self.stems):
                 continue
@@ -102,8 +114,9 @@ def run(project) -> tuple[list[Problem], dict]:
     checker = Checker(project.glossary())
     done, flags, speakers, retries = project.done(), project.flags(), project.speakers(), project.retries()
     reviewed = project.reviewed()
+    changed = project.marked("speaker_changed")
     problems: list[Problem] = []
-    stats = {"subtitles": 0, "over_cps": 0, "over_max_cps": 0}
+    stats = {"subtitles": 0, "over_cps": 0, "over_max_cps": 0, "by_part": [[0, 0] for _ in project.chunks]}
     for k, chunk in enumerate(project.chunks):
         have = done.get(k, {})
         by_item: dict[int, list[tuple[str, int]]] = {}
@@ -118,6 +131,8 @@ def run(project) -> tuple[list[Problem], dict]:
             stats["subtitles"] += 1
             rate = limits.cps(" ".join(texts), item.start, item.end)
             stats["over_cps"] += rate > limits.CPS
+            stats["by_part"][k][0] += 1
+            stats["by_part"][k][1] += rate > limits.CPS
             stats["over_max_cps"] += rate > limits.MAX_CPS
             soft = limits.budgets(item)
             # Too long when the whole subtitle reads faster than MAX_CPS or does not fit the screen;
@@ -137,6 +152,8 @@ def run(project) -> tuple[list[Problem], dict]:
                     if fix and tried:
                         fix, message = False, message + " (after a retry)"
                     problems.append(Problem(k, key, fix, message, part.text, have[key]))
+                if key in changed.get(k, set()):
+                    problems.append(Problem(k, key, False, "the speaker was changed instead of the gender: check who speaks", part.text, have[key]))
                 # A doubt about who speaks matters only where the line shows gender
                 if key in flags.get(k, []) and checks.shows_gender(have[key]):
                     problems.append(Problem(k, key, False, "the model was unsure who speaks (?)", part.text, have[key]))

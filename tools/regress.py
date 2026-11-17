@@ -113,7 +113,7 @@ def check(answer_text: str, path: Path) -> tuple[dict, list[str]]:
         if limit and len(limits.visible(text)) > limit:
             n["too_long"] += 1
             failed.append(f"{key}: {len(limits.visible(text))} characters, limit {limit} | {text}")
-        if want.get("latin") != "ok" and _LATIN_RE.search(text):
+        if want.get("latin") != "ok" and _LATIN_RE.search(re.sub(r"</?i>", "", text)):
             n["latin"] += 1
             failed.append(f"{key}: Latin letters | {text}")
         if _RUSSIAN_RE.search(text):

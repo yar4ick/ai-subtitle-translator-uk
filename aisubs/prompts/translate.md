@@ -32,6 +32,8 @@ LANGUAGE
 - Living spoken Ukrainian in the register of the film and of each character. Render idioms, insults and exclamations by function, with what a Ukrainian would say there («No shit.» as agreement → «Ще б пак.», «Fuck that.» → «Та ну нафіг.», «Counting on you.» → «Не підведи.»). No calques, no Russianisms, no surzhyk.
 - Swearing: keep its strength with natural Ukrainian swearing; do not soften and do not add. Mild (damn, hell, crap): чорт, дідько, трясця. Strong (shit, fuck, bitch, ass): бля, бляха, курва, сука, нахуй, дупа — not «блін» or «чорт». An exclamation is rendered by an exclamation («Shit!» → «Бляха!» or «Бля!»), not by the dictionary word («Лайно!»).
 - GLOSSARY, when given, is binding: the gender of S and A from CAST, ти/ви from PAIRS. A gender with `?` (`ж?`) is a guess: prefer wording that does not show it.
+- Forms of address with gender (babe → кохана / коханий, honey → люба / любий) follow the gender of A.
+- Titles of songs, films and books: the established Ukrainian title in «», else the original title in «» (Latin letters are fine there).
 - People outside PAIRS: choose ти or ви once per scene by their relation (officials, teachers, doctors and strangers to adults: ви) and keep it in every line of the scene.
 - When several lines speak of the same thing, keep one noun for it, so that gender and number stay the same.
 - Names and terms exactly as in CAST and TERMS; otherwise Ukrainian transliteration, consistent across the film. No Latin letters in a line: transliterate or translate brands, product names and abbreviations too (FBI → ФБР, iPhone → айфон) unless TERMS says otherwise. If you coin a rendering for a new recurring name or term, add a final line `+|english=українською`.
@@ -40,35 +42,35 @@ LANGUAGE
 - CONTEXT lines are for reference only; do not translate them.
 
 EXAMPLES (invented; М and О are cast codes)
-1|≤24|Well, I mean, I guess we could try again tomorrow.
-2|≤20|Listen, Kate, you have got to get out of there right now!
-3|I haven't got the faintest idea what you're talking about.
-4|It's not rocket science, kid.
-5|≤18|I already told him everything.
-6|If you ever come near my family again,
-7|I will end you.
-8|≤27|Get your ass in the car, damn it!
+901|≤24|Well, I mean, I guess we could try again tomorrow.
+902|≤20|Listen, Kate, you have got to get out of there right now!
+903|I haven't got the faintest idea what you're talking about.
+904|It's not rocket science, kid.
+905|≤18|I already told him everything.
+906|If you ever come near my family again,
+907|I will end you.
+908|≤27|Get your ass in the car, damn it!
 
 =
-9|Morning.
-10|You're up early.
-11|Couldn't sleep. My knee again.
-12|Then see a doctor, Dad.
-13|And who drives you to school?
-14|I told you I'd take the bus.
+909|Morning.
+910|You're up early.
+911|Couldn't sleep. My knee again.
+912|Then see a doctor, Dad.
+913|And who drives you to school?
+914|I told you I'd take the bus.
 
-1|М>О|Спробуймо ще раз завтра.
-2|М>О|Тікай звідти, зараз!
-3|О>М|Гадки не маю, про що ти.
-4|М>О|Теж мені наука, малий.
-5|?>М|Він уже все знає.
-6|М>О|Ще раз підійдеш до моєї родини —
-7|М>О|і тобі кінець.
-8|О>М|Ану марш у машину, трясця!
-@|9-14|М (father) and О (Kate, his daughter) at home. 12=О (says Dad), 13=М (he drives her), 14=О (answers 13), 11=М (12 answers him); 9-10 are one turn, О
-9|О>М|Доброго ранку.
-10|О>М|Рано ти встав.
-11|М>О|Не спалося. Знову коліно.
-12|О>М|То сходи до лікаря, тату.
-13|М>О|А хто тебе до школи возитиме?
-14|О>М|Я ж казала, що їздитиму автобусом.
+901|М>О|Спробуймо ще раз завтра.
+902|М>О|Тікай звідти, зараз!
+903|О>М|Гадки не маю, про що ти.
+904|М>О|Теж мені наука, малий.
+905|?>М|Він уже все знає.
+906|М>О|Ще раз підійдеш до моєї родини —
+907|М>О|і тобі кінець.
+908|О>М|Ану марш у машину, трясця!
+@|909-914|М (father) and О (Kate, his daughter) at home. 912=О (says Dad), 913=М (he drives her), 914=О (answers 913), 911=М (912 answers him); 909-910 are one turn, О
+909|О>М|Доброго ранку.
+910|О>М|Рано ти встав.
+911|М>О|Не спалося. Знову коліно.
+912|О>М|То сходи до лікаря, тату.
+913|М>О|А хто тебе до школи возитиме?
+914|О>М|Я ж казала, що їздитиму автобусом.

@@ -19,15 +19,22 @@ _SECOND = {"ти"}
 _GENDERS = {"ч": "ч", "ж": "ж"}
 WINDOW = 3  # past-tense words this close to «я» / «ти» are taken as its verbs
 # Look like masculine past tense but are not verbs
-_NOT_VERBS = set("знов любов кров морков років друзів хлопців батьків грошей слів часів разів днів тижнів доларів братів".split())
+_NOT_VERBS = set("агов знов любов кров морков років друзів хлопців батьків грошей слів часів разів днів тижнів доларів братів".split())
 # «-ів» is as often a plural noun (копів, псів) as a verb (хотів, сидів): such a word counts
 # only right next to «я» / «ти», with nothing but these words between them
 _PARTICLES = set("не ж же вже би б теж також ще аж навіть просто так дуже завжди ніколи справді тоді тут там й і".split())
 
 
+# Masculine past tense that is short or does not end in -в
+_SHORT_MASC = set("був мав дав жив їв пив бив вив шив мив рив крив міг зміг допоміг зник звик замовк "
+                  "приніс заніс відніс ніс віз привіз біг втік утік ліг сів ріс виріс помер вмер умер спік".split())
+
+
 def past_gender(word: str) -> str:
     """'ч' / 'ж' for a word that looks like a singular past-tense verb, else ''."""
     w = word.lower()
+    if w in _SHORT_MASC:
+        return "ч"
     if len(w) < 4:
         return ""
     if w.endswith(("лася", "лась", "ла")):
@@ -40,12 +47,57 @@ def past_gender(word: str) -> str:
 # Words that show the speaker's or addressee's gender without a past-tense verb
 _GENDERED = set("радий рада певен певна певний згоден згодна сам сама винен винна готовий готова живий жива "
                 "самотній самотня втомився втомилася голодний голодна потрібен потрібна вагітна".split())
+# Forms of address with gender: «Привіт, кохана» says that A is a woman
+ADDRESS = {"кохана": "ж", "коханий": "ч", "люба": "ж", "любий": "ч", "мила": "ж", "милий": "ч",
+           "рідна": "ж", "рідний": "ч", "серденько": "", "сонечко": ""}
+# A sentence about someone else: its past tense says nothing about the speaker or the addressee
+_THIRD = set("він вона воно вони це то той та те хтось ніхто все усе всі усі щось ніщо".split())
+_PERSONAL = set("я ти мене тебе мені тобі мною тобою".split())
 
 
 def shows_gender(text: str) -> bool:
-    """True if the Ukrainian line has a word whose form depends on gender: «забув», «рада».
-    A doubt about who speaks matters for the translation only in such lines."""
-    return any(past_gender(w) or w in _GENDERED for w in (x.lower() for x in _WORD_RE.findall(text)))
+    """True if the Ukrainian line has a form that depends on the gender of the speaker or the
+    addressee: «забув», «Ти був там?», «Я впевнений», «Привіт, кохана». A doubt about who
+    speaks matters for the translation only in such lines; «Це була найкраща ніч» is not one."""
+    for sentence in _SENTENCE_RE.findall(text):
+        words = [w.lower() for w in _WORD_RE.findall(sentence)]
+        personal = any(w in _PERSONAL for w in words)
+        if any(w in ADDRESS and ADDRESS[w] for w in words):
+            return True
+        for k, w in enumerate(words):
+            if w in _GENDERED or (past_gender(w) and (personal or not set(words[:k]) & _THIRD)):
+                return True
+            # «я впевнений», «ти справжня»: an adjective right after я / ти
+            if w in ("я", "ти") and k + 1 < len(words):
+                nxt = words[k + 1]
+                if len(nxt) > 4 and nxt.endswith(("ий", "ій", "а", "я")):
+                    return True
+    return False
+
+
+def address_conflicts(text: str, speakers: str, cast: dict[str, str]) -> list[str]:
+    """«Привіт, кохана» to a man: a form of address whose gender is not A's."""
+    _, _, a = speakers.partition(">")
+    want = cast.get(base_code(a), "")
+    if not want:
+        return []
+    out = []
+    for m in re.finditer(r"(?:^|[,—–-]\s*)([а-яіїєґʼ'’]+)\s*(?=[,.!?…]|$)", text.lower()):
+        g = ADDRESS.get(m.group(1), "")
+        if g and g != want:
+            out.append(f"«{m.group(1)}», but A is {want}")
+    return out
+
+
+_TI = set("ти тебе тобі тобою твій твоя твоє твої твого твоєї твоїх твоїм твоєму".split())
+_VY = set("ви вас вам вами ваш ваша ваше ваші вашого вашої ваших вашим вашому".split())
+
+
+def formality(text: str) -> str:
+    """'ти' / 'ви' if the line uses only one of them, else ''."""
+    words = {w.lower() for w in _WORD_RE.findall(text)}
+    ti, vy = bool(words & _TI), bool(words & _VY)
+    return "ти" if ti and not vy else "ви" if vy and not ti else ""
 
 
 def genders(g: Glossary) -> dict[str, str]:

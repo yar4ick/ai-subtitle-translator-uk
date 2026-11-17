@@ -70,7 +70,7 @@ def _request(project: Project, k: int, brief: bool) -> str:
         project.items, project.chunks, k, project.done(), project.meta["title"],
         brief=brief, glossary_block="" if g.is_empty() else glossary.render(g),
         scene_starts=frozenset(a for a, _ in scenes[1:]), speaker_codes=glossary.speaker_codes(g),
-        starts=project.starts(),
+        starts=project.starts(), speakers=project.speakers(),
     )
 
 
@@ -173,6 +173,10 @@ def _report(project: Project, problems: list[validate.Problem], stats: dict, lim
     n = stats["subtitles"] or 1
     out.append(f"Checked {stats['subtitles']} subtitles: reading speed over {validate.limits.CPS} CPS in "
                f"{stats['over_cps'] / n:.1%}, over {validate.limits.MAX_CPS} in {stats['over_max_cps'] / n:.1%}")
+    by_part = stats.get("by_part", [])
+    if len(by_part) > 1 and any(n for n, _ in by_part):
+        # Rules may weaken late in a long conversation: the share per part shows it
+        out.append(f"Over {validate.limits.CPS} CPS by part: " + ", ".join(f"{k + 1}: {o / n:.0%}" for k, (n, o) in enumerate(by_part) if n))
     for fix, title in ((True, "To fix (the AI gets these lines again)"), (False, "To review")):
         group = [p for p in problems if p.fix == fix]
         if not group:
@@ -212,23 +216,63 @@ def _after_all_done(project: Project, args, brief_next: bool) -> int:
     return 0
 
 
+def _unsaved_edits(project: Project, path: Path) -> bool:
+    """A person changed lines in the review file and did not apply them (a file made from
+    an older state of the translation does not count: it would bring old lines back)."""
+    text = path.read_text(encoding="utf-8-sig")
+    try:
+        return bool(review.apply(project, text, dry_run=True)[0])
+    except review.Stale:
+        return False
+
+
 def _finish(project: Project, problems: list, film) -> int:
     """The last steps without asking: the review file and the translated .srt."""
     path = project.dir / "review.txt"
     text, count = review.render(project, problems, str(film))
-    if count:
-        if path.exists() and review.apply(project, path.read_text(encoding="utf-8-sig"), dry_run=True)[0]:
-            print(f"{path} has edits that are not saved yet; it was left as it is (aisubs review {film} --apply)")
-        else:
-            path.write_text(text, encoding="utf-8")
-            print(f"Wrote {path}: {count} lines to look at (the user can fix them, then: aisubs review {film} --apply)")
+    if path.exists() and _unsaved_edits(project, path):
+        print(f"{path} has edits that are not saved yet; it was left as it is (aisubs review {film} --apply)")
+    elif count:
+        path.write_text(text, encoding="utf-8")
+        print(f"Wrote {path}: {count} lines to look at (the user can fix them, then: aisubs review {film} --apply)")
+    elif path.exists():
+        path.unlink()  # from an earlier run: nothing to look at now
     out = project.output_path()
     if not project.owns_output(out):
-        print(f"{out} already exists and was not written by aisubs: not overwritten. Write it with: aisubs assemble {film} -o OTHER.srt")
-        return 0
+        print(f"{out} already exists and was not written by aisubs: NOT overwritten, the translation is not saved as .srt yet. "
+              f"Write it with: aisubs assemble {film} -o OTHER.srt")
+        return 4
     _write_output(project, out, partial=False, bom=False)
     print(f"Wrote {out}. Done.")
     return 0
+
+
+def _import_fix(project: Project, args, ks: list[int], problems: list, answer: dict) -> int:
+    """Lines of several parts in one answer to a FIX request: each goes to the part that asked for it."""
+    accepted, wanted_all = [], set()
+    speakers = project.speakers()
+    for k in ks:
+        wanted = {p.key for p in problems if p.k == k and p.fix}
+        wanted_all |= wanted
+        part_answer = {key: v for key, v in answer.items() if key in wanted}
+        if part_answer:
+            saved = project.save(k, part_answer, retry=True)["accepted"]
+            accepted += saved
+            print(f"part {k + 1}/{len(project.chunks)}: accepted {len(saved)} lines")
+            # A gender problem "fixed" by swapping the speakers, not the verb: a person should look
+            gender = {p.key for p in problems if p.k == k and p.fix and p.message.startswith("gender")}
+            swapped = [key for key in saved if key in gender and part_answer[key][2] and part_answer[key][2] != speakers.get(k, {}).get(key)]
+            project.mark(k, swapped, field="speaker_changed")
+        # Asked but not answered: counts as the retry, so the line goes to review instead of being asked forever
+        project.mark(k, [key for key in wanted if key not in part_answer], retry=True)
+    _gender_report(project, {key: answer[key] for key in accepted})
+    left = sorted(wanted_all - set(accepted), key=lambda key: (len(key), key))
+    if left:
+        print(f"not answered (they go to review): {', '.join(left)}")
+    extra = sorted(set(answer) - wanted_all, key=lambda key: (len(key), key))
+    if extra:
+        print(f"not asked for (ignored): {', '.join(extra)}")
+    return _after_all_done(project, args, args.next)
 
 
 FULL_EVERY = 4  # parts 5, 9, 13… come with the instructions and the glossary again
@@ -269,21 +313,7 @@ def cmd_import(args) -> int:
                 return 0
             k = own
     if args.fix:
-        # Lines of several parts in one answer: each goes to the part that asked for it
-        accepted, wanted_all = [], set()
-        for kk in ks:
-            wanted = {p.key for p in problems if p.k == kk and p.fix}
-            wanted_all |= wanted
-            part_answer = {key: v for key, v in answer.items() if key in wanted}
-            if part_answer:
-                saved = project.save(kk, part_answer, retry=True)["accepted"]
-                accepted += saved
-                print(f"part {kk + 1}/{len(project.chunks)}: accepted {len(saved)} lines")
-        _gender_report(project, {key: answer[key] for key in accepted})
-        left = sorted(wanted_all - set(accepted), key=lambda key: (len(key), key))
-        if left:
-            print(f"not answered: {', '.join(left)}")
-        return _after_all_done(project, args, args.next)
+        return _import_fix(project, args, ks, problems, answer)
     report = project.save(k, answer, exchange.parse_notes(text))
     if not report["accepted"] and _REFUSAL_RE.search(text):
         project.set_refused(k, True)
@@ -363,7 +393,11 @@ def cmd_review(args) -> int:
     if args.apply:
         if not path.exists():
             raise ProjectError(f"{path} not found; first run: aisubs review {args.film}")
-        changed, errors = review.apply(project, path.read_text(encoding="utf-8-sig"))
+        try:
+            changed, errors = review.apply(project, path.read_text(encoding="utf-8-sig"))
+        except review.Stale:
+            raise ProjectError(f"{path} was written before the translation changed, so it would bring old lines back. "
+                               f"Run aisubs review {args.film} again and make the edits in the new file") from None
         for error in errors:
             print(f"warning: {error}")
         print(f"Saved {len(changed)} changed lines" + (": " + ", ".join(f"{k + 1}:{key}" for k, key in changed[:30]) if changed else ""))
@@ -375,7 +409,7 @@ def cmd_review(args) -> int:
                 print(f"gender check: {k + 1}:{key}|{sa}|{done[k][key]} — {problem}")
         print(f"Next: aisubs assemble {args.film}")
         return 0
-    if path.exists() and not args.force and review.apply(project, path.read_text(encoding="utf-8-sig"), dry_run=True)[0]:
+    if path.exists() and not args.force and _unsaved_edits(project, path):
         raise ProjectError(f"{path} has edits that are not saved yet: run aisubs review {args.film} --apply (or --force to discard them)")
     problems, _ = validate.run(project)
     text, count = review.render(project, problems, args.film)

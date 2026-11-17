@@ -39,7 +39,7 @@ _CONTAINERS = {"cast listing", "div col", "columns-list", "col-begin", "gallery"
 # Templates that stand for their first argument
 _FIRST_ARG = {"nihongo", "lang", "nowrap", "small", "nobold", "abbr", "nihongo2", "ill", "illm", "anchor",
               "ніхонґо", "ніхонго", "нп", "lang-en", "не перекладено"}
-MAX_NAMES = 40
+MAX_NAMES = 25
 # A capitalized Ukrainian word or name in running text: «Гокінс», «Вілл Баєрс», «Найт-Сіті»
 _UK_NAME_RE = re.compile(r"\b[А-ЯІЇЄҐ][а-яіїєґʼ'’]+(?:[- ][А-ЯІЇЄҐ][а-яіїєґʼ'’]+)*")
 # «Нічного міста (англ. Night City)»
@@ -146,7 +146,15 @@ def uk_names(wikitext: str) -> list[str]:
         if m.start() == 0 or re.search(r"[.!?…:;\n]\s*$", text[max(0, m.start() - 3):m.start()]):
             continue
         counts[m.group()] = counts.get(m.group(), 0) + 1
-    names = [w for w, n in sorted(counts.items(), key=lambda kv: -kv[1]) if n >= 2][:MAX_NAMES]
+    # Case forms of one name count together under the shortest one: «Вілл», «Вілла» -> «Вілл»
+    merged: dict[str, int] = {}
+    for w in sorted(counts, key=len):
+        base = next((b for b in merged if " " not in w and w.startswith(b[:-1] if len(b) > 4 else b) and len(w) - len(b) <= 2), None)
+        if base:
+            merged[base] += counts[w]
+        else:
+            merged[w] = counts[w]
+    names = [w for w, n in sorted(merged.items(), key=lambda kv: -kv[1]) if n >= 2][:MAX_NAMES]
     pairs = [f"{uk.strip(' «»')} = {en.strip()}" for uk, en in _UK_PAIR_RE.findall(text)][:MAX_NAMES]
     return names + pairs
 

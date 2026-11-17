@@ -30,7 +30,8 @@ _INTRO_RE = re.compile(rf"^(?:(?:It's|This is|I'm|I am|My name is|My name's|Call
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
 # "Sign here.", "From here on": words that come before "here" without being names
 _NOT_INTRO = set("Sign Come Stay Wait Over From Up Down Get Stop Look Right Out In Sit Stand Put Click Press Start "
-                 "Leave Go Live Work Park Turn Move Hold Lie Back Everyone Everybody Nobody Somebody Someone".split())
+                 "Leave Go Live Work Park Turn Move Hold Lie Back Everyone Everybody Nobody Somebody Someone "
+                 "Not Nothing You Why Anybody Anyone Always Nice Police Something Everything".split())
 
 # Capitalized mid-sentence for other reasons
 _NOT_NAMES = set(
@@ -106,6 +107,7 @@ def find(items: list[Item]) -> list[Candidate]:
     # A sentence-initial "Word, ..." is a vocative only if the word is also used as a name elsewhere
     starts: set[str] = set()
     end_vocatives = {m.group(1) for _, line, _ in lines if (m := _VOCATIVE_END_RE.search(line))}
+    all_vocatives = end_vocatives | {m.group(1) for _, line, _ in lines if (m := _VOCATIVE_START_RE.match(line))}
 
     for _, line, speaker in lines:
         if speaker:
@@ -119,10 +121,16 @@ def find(items: list[Item]) -> list[Candidate]:
         for v in vocatives:
             add(v, line, "vocative")
         mid = _mid_sentence_names(line)
-        for sentence in _SENTENCE_SPLIT_RE.split(line.lstrip("-–— ")):
+        sentences = _SENTENCE_SPLIT_RE.split(line.lstrip("-–— "))
+        for n, sentence in enumerate(sentences):
             m = _INTRO_RE.match(sentence)
             name = m and (m.group(1) or m.group(2))
             if not name or name.split()[0] in _NOT_NAMES | _NOT_VOCATIVES | _NOT_INTRO:
+                continue
+            # Trust it if the name is used as a name elsewhere, or for "X here." that opens a longer
+            # line (a call: "Katsuo here. Heard about your mom."); not "It's Christmas.", "Not here."
+            elsewhere = mid_names[name] > mid.count(name) or name in all_vocatives  # in other lines
+            if not elsewhere and not (m.group(2) and n + 1 < len(sentences)):
                 continue
             if name in vocatives or name in mid:  # counted below; only mark it
                 found.setdefault(name, Candidate(name)).intro += 1
